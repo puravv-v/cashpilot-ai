@@ -6,8 +6,10 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
+import com.cashpilot.backend.dto.CashFlowProjection;
+import java.math.BigDecimal;
 import java.util.List;
+import com.cashpilot.backend.dto.CashFlowRisk;
 
 @RestController
 @RequestMapping("/api/obligations")
@@ -37,5 +39,28 @@ public class CashObligationController {
     @GetMapping("/upcoming")
     public ResponseEntity<List<CashObligation>> getUpcoming() {
         return ResponseEntity.ok(service.getUpcomingObligations());
+    }
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
+
+        service.deleteObligation(id);
+
+        return ResponseEntity.noContent().build();
+    }
+    @GetMapping("/projection")
+    public ResponseEntity<List<CashFlowProjection>> getProjection(
+            @RequestParam BigDecimal currentCash) {
+
+        return ResponseEntity.ok(
+            service.getCashFlowProjection(currentCash)
+        );
+    }
+    @GetMapping("/risk")
+    public ResponseEntity<CashFlowRisk> getCashFlowRisk(
+            @RequestParam BigDecimal currentCash) {
+
+        return ResponseEntity.ok(
+            service.detectCashFlowRisk(currentCash)
+        );
     }
 }
