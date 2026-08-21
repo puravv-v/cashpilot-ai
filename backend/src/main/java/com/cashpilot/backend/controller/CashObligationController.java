@@ -10,6 +10,7 @@ import com.cashpilot.backend.dto.CashFlowProjection;
 import java.math.BigDecimal;
 import java.util.List;
 import com.cashpilot.backend.dto.CashFlowRisk;
+import com.cashpilot.backend.dto.FinancialRecommendation;
 
 @RestController
 @RequestMapping("/api/obligations")
@@ -61,6 +62,14 @@ public class CashObligationController {
 
         return ResponseEntity.ok(
             service.detectCashFlowRisk(currentCash)
+        );
+    }
+    @GetMapping("/recommendations")
+    public ResponseEntity<List<FinancialRecommendation>> getRecommendations(
+            @RequestParam BigDecimal currentCash) {
+
+        return ResponseEntity.ok(
+            service.getRecommendations(currentCash)
         );
     }
 }
