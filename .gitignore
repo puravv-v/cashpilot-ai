@@ -1,0 +1,36 @@
+# IDE
+.vscode/
+.idea/
+
+# Java
+*.class
+target/
+
+# Spring
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# Node
+node_modules/
+dist/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+.pytest_cache/
+
+# Build files
+*.jar
