@@ -1,60 +1,80 @@
 import os
+import json
 
-from google import genai
-from google.genai import types
 from dotenv import load_dotenv
-
-from .models import AIAnalysisRequest, AIAnalysisResponse
-
+from groq import Groq
 
 load_dotenv()
 
-client = genai.Client(
-    api_key=os.getenv("GEMINI_API_KEY")
+client = Groq(
+    api_key=os.getenv("GROQ_API_KEY")
 )
 
 
-def analyze_finances(data: AIAnalysisRequest) -> AIAnalysisResponse:
+def analyze_finances(data):
 
     prompt = f"""
-You are CashPilot, an AI finance controller for small and medium businesses.
+You are CashPilot AI, a financial cash-flow analysis assistant.
 
-Analyze the following financial information.
+Analyze the following business cash-flow information.
 
-Current cash:
-₹{data.currentCash}
+Financial data:
+{json.dumps(data, indent=2, default=str)}
 
-Risk:
-{data.risk.model_dump_json(indent=2)}
+Return ONLY valid JSON.
 
-Recommended actions:
-{[recommendation.model_dump() for recommendation in data.recommendations]}
+The JSON must contain exactly these four fields:
 
-Your job is to explain the situation clearly to a business owner.
+{{
+  "summary": "...",
+  "riskExplanation": "...",
+  "priorityAction": "...",
+  "outlook": "..."
+}}
 
 Rules:
-1. Never invent financial numbers.
-2. Only use the financial facts provided.
-3. Explain why the cash-flow risk exists.
-4. Identify the single most important action.
-5. Give a short business outlook.
-6. Keep the language practical and concise.
-7. Do not give legal, tax, or investment advice.
 
-Return a structured response with:
-- summary
-- riskExplanation
-- priorityAction
-- outlook
+1. Be concise and practical.
+2. Use the exact financial numbers provided.
+3. Do not invent transactions or amounts.
+4. Identify the most important cash-flow risk.
+5. Identify the most important action the business should take.
+6. Mention important dates when relevant.
+7. Use Indian Rupee notation such as ₹ when discussing amounts.
+8. Do not use markdown.
+9. Return JSON only.
 """
 
-    response = client.models.generate_content(
-        model="gemini-3.6-flash",
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=AIAnalysisResponse,
-        ),
+    response = client.chat.completions.create(
+        model="openai/gpt-oss-20b",
+        messages=[
+            {
+                "role": "system",
+                "content": "You are CashPilot AI. Return only valid JSON."
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        temperature=0.2,
+        max_completion_tokens=800
     )
 
-    return AIAnalysisResponse.model_validate_json(response.text)
+    text = response.choices[0].message.content
+
+    # Remove accidental markdown code fences
+    text = text.strip()
+
+    if text.startswith("```json"):
+        text = text[7:]
+
+    if text.startswith("```"):
+        text = text[3:]
+
+    if text.endswith("```"):
+        text = text[:-3]
+
+    text = text.strip()
+
+    return json.loads(text)

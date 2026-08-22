@@ -20,7 +20,7 @@ export const getCashFlowSummary = async () => {
    CASH FLOW PROJECTION
    ========================================================= */
 
-export const getCashFlowProjection = async (currentCash) => {
+export const getCashFlowProjection = async (currentCash = 0) => {
   const response = await API.get("/obligations/projection", {
     params: {
       currentCash: Number(currentCash || 0),
@@ -36,7 +36,7 @@ export const getCashFlowProjection = async (currentCash) => {
    CASH FLOW RISK
    ========================================================= */
 
-export const getCashFlowRisk = async (currentCash) => {
+export const getCashFlowRisk = async (currentCash = 0) => {
   const response = await API.get("/obligations/risk", {
     params: {
       currentCash: Number(currentCash || 0),
@@ -50,12 +50,15 @@ export const getCashFlowRisk = async (currentCash) => {
    RECOMMENDATIONS
    ========================================================= */
 
-export const getRecommendations = async (currentCash) => {
-  const response = await API.get("/obligations/recommendations", {
-    params: {
-      currentCash: Number(currentCash || 0),
-    },
-  });
+export const getRecommendations = async (currentCash = 0) => {
+  const response = await API.get(
+    "/obligations/recommendations",
+    {
+      params: {
+        currentCash: Number(currentCash || 0),
+      },
+    }
+  );
 
   return Array.isArray(response.data)
     ? response.data
@@ -67,7 +70,11 @@ export const getRecommendations = async (currentCash) => {
    ========================================================= */
 
 export const getAIAnalysis = async (data) => {
-  const response = await API.post("/ai/analyze", data);
+  const response = await API.post(
+    "/ai/analyze",
+    data
+  );
+
   return response.data;
 };
 
@@ -87,7 +94,9 @@ export const getAllTransactions = async () => {
   return getTransactions();
 };
 
-export const createTransaction = async (transaction) => {
+export const createTransaction = async (
+  transaction
+) => {
   const response = await API.post(
     "/transactions",
     transaction
@@ -96,8 +105,22 @@ export const createTransaction = async (transaction) => {
   return response.data;
 };
 
-export const addTransaction = async (transaction) => {
+export const addTransaction = async (
+  transaction
+) => {
   return createTransaction(transaction);
+};
+
+export const updateTransaction = async (
+  id,
+  transaction
+) => {
+  const response = await API.put(
+    `/transactions/${id}`,
+    transaction
+  );
+
+  return response.data;
 };
 
 export const deleteTransaction = async (id) => {
@@ -109,7 +132,10 @@ export const deleteAllTransactions = async () => {
 
   await Promise.all(
     transactions
-      .filter((transaction) => transaction?.id != null)
+      .filter(
+        (transaction) =>
+          transaction?.id != null
+      )
       .map((transaction) =>
         deleteTransaction(transaction.id)
       )
@@ -132,7 +158,9 @@ export const getAllObligations = async () => {
   return getObligations();
 };
 
-export const createObligation = async (obligation) => {
+export const createObligation = async (
+  obligation
+) => {
   const response = await API.post(
     "/obligations",
     obligation
@@ -141,28 +169,54 @@ export const createObligation = async (obligation) => {
   return response.data;
 };
 
-export const addObligation = async (obligation) => {
+export const addObligation = async (
+  obligation
+) => {
   return createObligation(obligation);
+};
+
+export const updateObligation = async (
+  id,
+  obligation
+) => {
+  const response = await API.put(
+    `/obligations/${id}`,
+    obligation
+  );
+
+  return response.data;
+};
+
+export const markObligationAsDone = async (
+  id,
+  actualDate
+) => {
+  const response = await API.post(
+    `/obligations/${id}/complete`,
+    null,
+    {
+      params: {
+        actualDate,
+      },
+    }
+  );
+
+  return response.data;
 };
 
 export const deleteObligation = async (id) => {
   await API.delete(`/obligations/${id}`);
 };
 
-/*
- * The backend does not currently have:
- *
- * DELETE /api/obligations
- *
- * So Clear All is implemented by fetching all
- * obligations and deleting them one by one.
- */
 export const deleteAllObligations = async () => {
   const obligations = await getObligations();
 
   await Promise.all(
     obligations
-      .filter((obligation) => obligation?.id != null)
+      .filter(
+        (obligation) =>
+          obligation?.id != null
+      )
       .map((obligation) =>
         deleteObligation(obligation.id)
       )
@@ -173,11 +227,6 @@ export const deleteAllObligations = async () => {
    STARTING CASH
    ========================================================= */
 
-/*
- * Backend endpoint:
- *
- * GET /api/settings/starting-cash
- */
 export const getStartingCash = async () => {
   const response = await API.get(
     "/settings/starting-cash"
@@ -186,17 +235,9 @@ export const getStartingCash = async () => {
   return response.data;
 };
 
-/*
- * Backend expects:
- *
- * @RequestBody BigDecimal amount
- *
- * Therefore we send the number directly.
- *
- * NOT:
- * { amount: number }
- */
-export const updateStartingCash = async (amount) => {
+export const updateStartingCash = async (
+  amount
+) => {
   const numericAmount = Number(amount);
 
   const response = await API.put(

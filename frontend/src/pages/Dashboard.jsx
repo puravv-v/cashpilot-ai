@@ -10,16 +10,16 @@ import {
   getCashFlowRisk,
   getRecommendations,
   getAIAnalysis,
-
   getTransactions,
   createTransaction,
+  updateTransaction,
   deleteTransaction,
-
   getObligations,
   createObligation,
+  updateObligation,
+  markObligationAsDone,
   deleteObligation,
   deleteAllObligations,
-
   updateStartingCash,
 } from "../services/api";
 
@@ -39,8 +39,8 @@ import {
 
 import "./Dashboard.css";
 
-
 function Dashboard() {
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -52,17 +52,33 @@ function Dashboard() {
     netCashFlow: 0,
   });
 
-  const [transactions, setTransactions] = useState([]);
-  const [obligations, setObligations] = useState([]);
-  const [projection, setProjection] = useState([]);
+  const [transactions, setTransactions] =
+    useState([]);
+
+  const [obligations, setObligations] =
+    useState([]);
+
+  const [projection, setProjection] =
+    useState([]);
+
   const [risk, setRisk] = useState(null);
-  const [recommendations, setRecommendations] = useState([]);
+
+  const [recommendations, setRecommendations] =
+    useState([]);
+
   const [aiData, setAiData] = useState(null);
 
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving] =
+    useState(false);
 
   const [startingCashInput, setStartingCashInput] =
     useState("");
+
+  const [editingTransactionId, setEditingTransactionId] =
+    useState(null);
+
+  const [editingObligationId, setEditingObligationId] =
+    useState(null);
 
   const [transactionForm, setTransactionForm] =
     useState({
@@ -77,68 +93,35 @@ function Dashboard() {
       amount: "",
       type: "EXPENSE",
       description: "",
-      dueDate: getTodayDate(),
+      dueDate: getTomorrowDate(),
     });
-
-
-  /* =========================================================
-     INITIAL LOAD
-     ========================================================= */
 
   useEffect(() => {
     loadDashboard();
   }, []);
 
-
-  /* =========================================================
+  /* =====================================================
      LOAD DASHBOARD
-     ========================================================= */
+     ===================================================== */
 
   async function loadDashboard() {
+
     try {
+
       setLoading(true);
       setError("");
 
       /*
-       * FIRST get the actual backend summary.
-       *
-       * currentCash comes from:
-       *
-       * startingCash
-       * + income
-       * - expenses
-       *
-       * Nothing is hardcoded here.
+       * Summary must be loaded first because projection,
+       * risk and recommendations depend on CURRENT CASH.
        */
-
       const summaryData =
         await getCashFlowSummary();
 
-      const startingCash = Number(
-        summaryData?.startingCash ?? 0
-      );
-
-      const totalIncome = Number(
-        summaryData?.totalIncome ?? 0
-      );
-
-      const totalExpenses = Number(
-        summaryData?.totalExpenses ?? 0
-      );
-
-      const netCashFlow =
-        totalIncome - totalExpenses;
-
-      const currentCash = Number(
-        summaryData?.currentCash ??
-        (startingCash + netCashFlow)
-      );
-
-
-      /*
-       * Now that we know the real current cash,
-       * use THAT for projection/risk/recommendations.
-       */
+      const currentCash =
+        Number(
+          summaryData?.currentCash || 0
+        );
 
       const [
         transactionData,
@@ -149,11 +132,16 @@ function Dashboard() {
       ] = await Promise.all([
         getTransactions(),
         getObligations(),
-        getCashFlowProjection(currentCash),
-        getCashFlowRisk(currentCash),
-        getRecommendations(currentCash),
+        getCashFlowProjection(
+          currentCash
+        ),
+        getCashFlowRisk(
+          currentCash
+        ),
+        getRecommendations(
+          currentCash
+        ),
       ]);
-
 
       const cleanTransactions =
         Array.isArray(transactionData)
@@ -175,46 +163,73 @@ function Dashboard() {
           ? recommendationData
           : [];
 
-
       setSummary({
-        startingCash,
+        startingCash: Number(
+          summaryData?.startingCash || 0
+        ),
         currentCash,
-        totalIncome,
-        totalExpenses,
-        netCashFlow,
+        totalIncome: Number(
+          summaryData?.totalIncome || 0
+        ),
+        totalExpenses: Number(
+          summaryData?.totalExpenses || 0
+        ),
+        netCashFlow: Number(
+          summaryData?.netCashFlow || 0
+        ),
       });
 
       setStartingCashInput(
         summaryData?.startingCash ?? ""
       );
 
-      setTransactions(cleanTransactions);
-      setObligations(cleanObligations);
-      setProjection(cleanProjection);
+      setTransactions(
+        cleanTransactions
+      );
+
+      setObligations(
+        cleanObligations
+      );
+
+      setProjection(
+        cleanProjection
+      );
+
       setRisk(riskData);
-      setRecommendations(cleanRecommendations);
 
+      setRecommendations(
+        cleanRecommendations
+      );
 
-      /* =====================================================
-         AI ANALYSIS
-         ===================================================== */
-
+      /*
+       * AI is optional. If it fails, the rest of the
+       * dashboard still works.
+       */
       try {
+
         const aiResponse =
           await getAIAnalysis({
             currentCash,
-            startingCash,
-            totalIncome,
-            totalExpenses,
-            netCashFlow,
-            projection: cleanProjection,
+            startingCash: Number(
+              summaryData?.startingCash || 0
+            ),
+            totalIncome: Number(
+              summaryData?.totalIncome || 0
+            ),
+            totalExpenses: Number(
+              summaryData?.totalExpenses || 0
+            ),
+            projection:
+              cleanProjection,
             risk: riskData,
             recommendations:
               cleanRecommendations,
           });
 
         setAiData(aiResponse);
+
       } catch (aiError) {
+
         console.error(
           "AI analysis failed:",
           aiError
@@ -224,6 +239,7 @@ function Dashboard() {
       }
 
     } catch (err) {
+
       console.error(
         "Dashboard loading error:",
         err
@@ -239,22 +255,25 @@ function Dashboard() {
         err?.response?.data?.error ||
         "Unable to load CashPilot data."
       );
+
     } finally {
+
       setLoading(false);
     }
   }
 
-
-  /* =========================================================
+  /* =====================================================
      STARTING CASH
-     ========================================================= */
+     ===================================================== */
 
-  async function handleStartingCashSubmit(event) {
+  async function handleStartingCashSubmit(
+    event
+  ) {
+
     event.preventDefault();
 
-    const amount = Number(
-      startingCashInput
-    );
+    const amount =
+      Number(startingCashInput);
 
     if (
       !Number.isFinite(amount) ||
@@ -267,35 +286,83 @@ function Dashboard() {
     }
 
     try {
+
       setSaving(true);
 
-      await updateStartingCash(amount);
+      await updateStartingCash(
+        amount
+      );
 
       await loadDashboard();
 
     } catch (err) {
+
       console.error(err);
 
       alert(
         err?.response?.data?.message ||
+        err?.response?.data?.error ||
         "Unable to update starting cash."
       );
+
     } finally {
+
       setSaving(false);
     }
   }
 
+  /* =====================================================
+     TRANSACTIONS
+     ===================================================== */
 
-  /* =========================================================
-     TRANSACTION
-     ========================================================= */
+  function startTransactionEdit(
+    transaction
+  ) {
 
-  async function handleTransactionSubmit(event) {
+    setEditingTransactionId(
+      transaction.id
+    );
+
+    setTransactionForm({
+      amount:
+        transaction.amount ?? "",
+      type:
+        transaction.type || "INCOME",
+      description:
+        transaction.description || "",
+      transactionDate:
+        toLocalDateTimeInput(
+          transaction.transactionDate
+        ),
+    });
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  }
+
+  function cancelTransactionEdit() {
+
+    setEditingTransactionId(null);
+
+    setTransactionForm({
+      amount: "",
+      type: "INCOME",
+      description: "",
+      transactionDate:
+        getLocalDateTime(),
+    });
+  }
+
+  async function handleTransactionSubmit(
+    event
+  ) {
+
     event.preventDefault();
 
-    const amount = Number(
-      transactionForm.amount
-    );
+    const amount =
+      Number(transactionForm.amount);
 
     if (
       !Number.isFinite(amount) ||
@@ -325,42 +392,68 @@ function Dashboard() {
       return;
     }
 
+    if (
+      transactionForm.transactionDate >
+      getLocalDateTime()
+    ) {
+      alert(
+        "Recorded transactions can only be today or in the past."
+      );
+      return;
+    }
+
     try {
+
       setSaving(true);
 
-      await createTransaction({
+      const payload = {
         amount,
-        type: transactionForm.type,
+        type:
+          transactionForm.type,
         description:
           transactionForm.description.trim(),
         transactionDate:
           transactionForm.transactionDate,
-      });
+      };
 
-      setTransactionForm({
-        amount: "",
-        type: "INCOME",
-        description: "",
-        transactionDate:
-          getLocalDateTime(),
-      });
+      if (editingTransactionId) {
+
+        await updateTransaction(
+          editingTransactionId,
+          payload
+        );
+
+      } else {
+
+        await createTransaction(
+          payload
+        );
+      }
+
+      cancelTransactionEdit();
 
       await loadDashboard();
 
     } catch (err) {
+
       console.error(err);
 
       alert(
         err?.response?.data?.message ||
-        "Unable to add transaction."
+        err?.response?.data?.error ||
+        "Unable to save transaction."
       );
+
     } finally {
+
       setSaving(false);
     }
   }
 
+  async function handleTransactionDelete(
+    id
+  ) {
 
-  async function handleTransactionDelete(id) {
     if (
       !window.confirm(
         "Delete this transaction?"
@@ -370,30 +463,83 @@ function Dashboard() {
     }
 
     try {
+
+      setSaving(true);
+
       await deleteTransaction(id);
 
       await loadDashboard();
 
     } catch (err) {
+
       console.error(err);
 
       alert(
         "Unable to delete transaction."
       );
+
+    } finally {
+
+      setSaving(false);
     }
   }
 
+  /* =====================================================
+     FUTURE CASH FLOWS
+     ===================================================== */
 
-  /* =========================================================
-     FUTURE CASH FLOW
-     ========================================================= */
+  function startObligationEdit(
+    obligation
+  ) {
 
-  async function handleObligationSubmit(event) {
+    setEditingObligationId(
+      obligation.id
+    );
+
+    setObligationForm({
+      amount:
+        obligation.amount ?? "",
+      type:
+        obligation.type || "EXPENSE",
+      description:
+        obligation.description || "",
+      dueDate:
+        obligation.dueDate || getTomorrowDate(),
+    });
+
+    const element =
+      document.getElementById(
+        "future-cash-flow-form"
+      );
+
+    if (element) {
+      element.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }
+  }
+
+  function cancelObligationEdit() {
+
+    setEditingObligationId(null);
+
+    setObligationForm({
+      amount: "",
+      type: "EXPENSE",
+      description: "",
+      dueDate: getTomorrowDate(),
+    });
+  }
+
+  async function handleObligationSubmit(
+    event
+  ) {
+
     event.preventDefault();
 
-    const amount = Number(
-      obligationForm.amount
-    );
+    const amount =
+      Number(obligationForm.amount);
 
     if (
       !Number.isFinite(amount) ||
@@ -414,48 +560,77 @@ function Dashboard() {
       return;
     }
 
-    if (!obligationForm.dueDate) {
+    if (
+      !obligationForm.dueDate
+    ) {
       alert(
-        "Select a date."
+        "Select a future date."
+      );
+      return;
+    }
+
+    if (
+      obligationForm.dueDate <=
+      getTodayDate()
+    ) {
+      alert(
+        "Future cash flows must have a date after today."
       );
       return;
     }
 
     try {
+
       setSaving(true);
 
-      await createObligation({
+      const payload = {
         amount,
-        type: obligationForm.type,
+        type:
+          obligationForm.type,
         description:
           obligationForm.description.trim(),
         dueDate:
           obligationForm.dueDate,
-      });
+      };
 
-      setObligationForm({
-        amount: "",
-        type: "EXPENSE",
-        description: "",
-        dueDate: getTodayDate(),
-      });
+      if (editingObligationId) {
+
+        await updateObligation(
+          editingObligationId,
+          payload
+        );
+
+      } else {
+
+        await createObligation(
+          payload
+        );
+      }
+
+      cancelObligationEdit();
 
       await loadDashboard();
 
     } catch (err) {
+
       console.error(err);
 
       alert(
         err?.response?.data?.message ||
-        "Unable to add future cash flow."
+        err?.response?.data?.error ||
+        "Unable to save future cash flow."
       );
+
     } finally {
+
       setSaving(false);
     }
   }
 
+  async function handleObligationDelete(
+    id
+  ) {
 
-  async function handleObligationDelete(id) {
     if (
       !window.confirm(
         "Delete this upcoming cash-flow item?"
@@ -465,21 +640,109 @@ function Dashboard() {
     }
 
     try {
+
+      setSaving(true);
+
       await deleteObligation(id);
 
       await loadDashboard();
 
     } catch (err) {
+
       console.error(err);
 
       alert(
         "Unable to delete upcoming item."
       );
+
+    } finally {
+
+      setSaving(false);
     }
   }
 
+  async function handleObligationDone(
+    obligation
+  ) {
+
+    /*
+     * The user confirms the actual date.
+     * Default = today.
+     */
+    const defaultDate =
+      getTodayDate();
+
+    const actualDate =
+      window.prompt(
+        `Confirm the actual date for "${obligation.description}".\n\nEnter date as YYYY-MM-DD:`,
+        defaultDate
+      );
+
+    if (actualDate === null) {
+      return;
+    }
+
+    const trimmedDate =
+      actualDate.trim();
+
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(
+        trimmedDate
+      )
+    ) {
+      alert(
+        "Please enter the date in YYYY-MM-DD format."
+      );
+      return;
+    }
+
+    if (
+      trimmedDate >
+      getTodayDate()
+    ) {
+      alert(
+        "The completed payment date cannot be in the future."
+      );
+      return;
+    }
+
+    if (
+      !window.confirm(
+        `Mark "${obligation.description}" as completed on ${trimmedDate}?\n\nIt will move from Upcoming Events to Recorded Transactions.`
+      )
+    ) {
+      return;
+    }
+
+    try {
+
+      setSaving(true);
+
+      await markObligationAsDone(
+        obligation.id,
+        trimmedDate
+      );
+
+      await loadDashboard();
+
+    } catch (err) {
+
+      console.error(err);
+
+      alert(
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        "Unable to mark cash flow as completed."
+      );
+
+    } finally {
+
+      setSaving(false);
+    }
+  }
 
   async function handleDeleteAllObligations() {
+
     if (!obligations.length) {
       return;
     }
@@ -493,6 +756,7 @@ function Dashboard() {
     }
 
     try {
+
       setSaving(true);
 
       await deleteAllObligations();
@@ -500,115 +764,117 @@ function Dashboard() {
       await loadDashboard();
 
     } catch (err) {
+
       console.error(err);
 
       alert(
         "Unable to clear upcoming cash flows."
       );
+
     } finally {
+
       setSaving(false);
     }
   }
 
-
-  /* =========================================================
+  /* =====================================================
      CHART DATA
-     ========================================================= */
+     ===================================================== */
 
-  const projectionChartData = useMemo(() => {
-    const currentPoint = {
-      date: "Now",
-      balance: Number(
-        summary.currentCash || 0
-      ),
-    };
+  const projectionChartData =
+    useMemo(() => {
 
-    const futurePoints = projection
-      .map((item) => ({
-        date: formatDate(item.date),
-        balance: Number(
-          item.cashBalance || 0
-        ),
-      }));
+      const currentPoint = {
+        date: "Now",
+        balance:
+          Number(
+            summary.currentCash || 0
+          ),
+      };
 
-    return [
-      currentPoint,
-      ...futurePoints,
-    ];
-  }, [
-    projection,
-    summary.currentCash,
-  ]);
+      const futurePoints =
+        projection.map(
+          (item) => ({
+            date:
+              formatDate(item.date),
+            balance:
+              Number(
+                item.cashBalance || 0
+              ),
+          })
+        );
 
+      return [
+        currentPoint,
+        ...futurePoints,
+      ];
 
-  /*
-   * IMPORTANT:
-   * This uses ONLY actual recorded transactions.
-   *
-   * Starting cash is NOT included.
-   */
+    }, [
+      projection,
+      summary.currentCash,
+    ]);
 
-  const pieData = useMemo(() => {
-    const income = Math.max(
-      Number(summary.totalIncome || 0),
-      0
-    );
+  const pieData =
+    useMemo(() => {
 
-    const expenses = Math.max(
-      Number(summary.totalExpenses || 0),
-      0
-    );
+      const income =
+        Number(
+          summary.totalIncome || 0
+        );
 
-    return [
-      {
-        name: "Income",
-        value: income,
-      },
-      {
-        name: "Expenses",
-        value: expenses,
-      },
-    ].filter(
-      (item) => item.value > 0
-    );
-  }, [
-    summary.totalIncome,
-    summary.totalExpenses,
-  ]);
+      const expenses =
+        Number(
+          summary.totalExpenses || 0
+        );
 
+      return [
+        {
+          name: "Income",
+          value: income,
+        },
+        {
+          name: "Expenses",
+          value: expenses,
+        },
+      ].filter(
+        (item) => item.value > 0
+      );
 
-  /* =========================================================
+    }, [
+      summary.totalIncome,
+      summary.totalExpenses,
+    ]);
+
+  /* =====================================================
      HELPERS
-     ========================================================= */
+     ===================================================== */
 
   function formatCurrency(value) {
+
     return `₹${Number(
       value || 0
-    ).toLocaleString("en-IN", {
-      maximumFractionDigits: 2,
-    })}`;
+    ).toLocaleString(
+      "en-IN",
+      {
+        maximumFractionDigits: 2,
+      }
+    )}`;
   }
-
-
-  function formatSignedCurrency(value) {
-    const number = Number(value || 0);
-
-    return `${number >= 0 ? "+" : "-"}₹${Math.abs(
-      number
-    ).toLocaleString("en-IN", {
-      maximumFractionDigits: 2,
-    })}`;
-  }
-
 
   function formatDate(value) {
+
     if (!value) {
       return "";
     }
 
-    const date = new Date(value);
+    const date =
+      new Date(value);
 
-    if (Number.isNaN(date.getTime())) {
+    if (
+      Number.isNaN(
+        date.getTime()
+      )
+    ) {
       return value;
     }
 
@@ -621,16 +887,21 @@ function Dashboard() {
       }
     );
   }
-
 
   function formatDateTime(value) {
+
     if (!value) {
       return "";
     }
 
-    const date = new Date(value);
+    const date =
+      new Date(value);
 
-    if (Number.isNaN(date.getTime())) {
+    if (
+      Number.isNaN(
+        date.getTime()
+      )
+    ) {
       return value;
     }
 
@@ -644,37 +915,36 @@ function Dashboard() {
     );
   }
 
+  function getRiskClass(
+    severity
+  ) {
 
-  function getRiskClass(severity) {
     switch (
-      String(severity || "")
-        .toUpperCase()
+      String(
+        severity || ""
+      ).toUpperCase()
     ) {
+
       case "CRITICAL":
         return "risk-critical";
 
-      case "HIGH":
-        return "risk-high";
-
       case "WARNING":
         return "risk-warning";
-
-      case "MEDIUM":
-        return "risk-medium";
 
       default:
         return "risk-low";
     }
   }
 
-
-  /* =========================================================
+  /* =====================================================
      LOADING
-     ========================================================= */
+     ===================================================== */
 
   if (loading) {
+
     return (
       <div className="dashboard-loading">
+
         <div className="loading-spinner">
           ↻
         </div>
@@ -686,14 +956,10 @@ function Dashboard() {
         <p>
           Loading your actual financial data.
         </p>
+
       </div>
     );
   }
-
-
-  /* =========================================================
-     DASHBOARD
-     ========================================================= */
 
   return (
     <div className="dashboard">
@@ -709,6 +975,7 @@ function Dashboard() {
           </div>
 
           <div>
+
             <h1>
               CashPilot
             </h1>
@@ -716,6 +983,7 @@ function Dashboard() {
             <p>
               AI-powered cash flow intelligence
             </p>
+
           </div>
 
         </div>
@@ -730,16 +998,14 @@ function Dashboard() {
 
       </header>
 
-
       {error && (
         <div className="error-banner">
           {error}
         </div>
       )}
 
-
       {/* =====================================================
-          ACCOUNT SETUP + TRANSACTION ENTRY
+          ACCOUNT + ACTUAL TRANSACTION
           ===================================================== */}
 
       <section className="management-grid">
@@ -772,7 +1038,9 @@ function Dashboard() {
               type="number"
               min="0"
               step="0.01"
-              value={startingCashInput}
+              value={
+                startingCashInput
+              }
               onChange={(event) =>
                 setStartingCashInput(
                   event.target.value
@@ -792,8 +1060,7 @@ function Dashboard() {
 
         </div>
 
-
-        {/* ADD TRANSACTION */}
+        {/* ACTUAL TRANSACTION */}
 
         <div className="management-card">
 
@@ -802,8 +1069,15 @@ function Dashboard() {
           </div>
 
           <h2>
-            Record Income or Expense
+            {editingTransactionId
+              ? "Edit Transaction"
+              : "Record Income or Expense"}
           </h2>
+
+          <p>
+            Only transactions that have already
+            happened can be recorded here.
+          </p>
 
           <form
             className="entry-form"
@@ -813,7 +1087,9 @@ function Dashboard() {
           >
 
             <select
-              value={transactionForm.type}
+              value={
+                transactionForm.type
+              }
               onChange={(event) =>
                 setTransactionForm({
                   ...transactionForm,
@@ -833,7 +1109,6 @@ function Dashboard() {
 
             </select>
 
-
             <input
               type="number"
               min="0.01"
@@ -851,7 +1126,6 @@ function Dashboard() {
               placeholder="Amount"
             />
 
-
             <input
               type="text"
               value={
@@ -867,9 +1141,9 @@ function Dashboard() {
               placeholder="Description"
             />
 
-
             <input
               type="datetime-local"
+              max={getLocalDateTime()}
               value={
                 transactionForm.transactionDate
               }
@@ -882,20 +1156,33 @@ function Dashboard() {
               }
             />
 
-
             <button
               type="submit"
               disabled={saving}
             >
-              Add
+              {editingTransactionId
+                ? "Update"
+                : "Add"}
             </button>
+
+            {editingTransactionId && (
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={
+                  cancelTransactionEdit
+                }
+                disabled={saving}
+              >
+                Cancel
+              </button>
+            )}
 
           </form>
 
         </div>
 
       </section>
-
 
       {/* =====================================================
           SUMMARY
@@ -905,46 +1192,53 @@ function Dashboard() {
 
         <SummaryCard
           title="Current Cash"
-          value={summary.currentCash}
+          value={
+            summary.currentCash
+          }
           subtitle="Starting cash + actual net flow"
           primary
         />
 
         <SummaryCard
           title="Starting Cash"
-          value={summary.startingCash}
+          value={
+            summary.startingCash
+          }
           subtitle="Opening balance"
         />
 
         <SummaryCard
           title="Total Income"
-          value={summary.totalIncome}
+          value={
+            summary.totalIncome
+          }
           subtitle="Recorded income"
-          income
         />
 
         <SummaryCard
           title="Total Expenses"
-          value={summary.totalExpenses}
+          value={
+            summary.totalExpenses
+          }
           subtitle="Recorded expenses"
-          expense
         />
 
         <SummaryCard
           title="Net Cash Flow"
-          value={summary.netCashFlow}
+          value={
+            summary.netCashFlow
+          }
           subtitle="Income minus expenses"
-          net
         />
 
       </section>
-
 
       {/* =====================================================
           RISK
           ===================================================== */}
 
       {risk && (
+
         <section className="risk-section">
 
           <div className="section-eyebrow">
@@ -961,70 +1255,48 @@ function Dashboard() {
             )}`}
           >
 
-            <div className="risk-main">
+            <div>
 
-              <div className="risk-icon">
-                !
-              </div>
+              <span className="risk-badge">
+                {risk.severity ||
+                  "LOW"}
+              </span>
 
-              <div>
+              <h3>
+                {risk.message ||
+                  "No significant cash-flow risk detected."}
+              </h3>
 
-                <span className="risk-badge">
-                  {risk.severity || "LOW"}
-                </span>
-
-                <h3>
-                  {risk.message ||
-                    "No significant cash-flow risk detected."}
-                </h3>
-
-                {risk.primaryCause && (
-                  <p>
-                    Primary cause:{" "}
-                    <strong>
-                      {risk.primaryCause}
-                    </strong>
-                  </p>
-                )}
-
-              </div>
+              {risk.primaryCause && (
+                <p>
+                  Primary cause:{" "}
+                  <strong>
+                    {risk.primaryCause}
+                  </strong>
+                </p>
+              )}
 
             </div>
 
+            <div className="risk-stat">
 
-            <div className="risk-stats">
+              <span>
+                Projected balance
+              </span>
 
-              <div>
-                <span>
-                  Risk Date
-                </span>
-
-                <strong>
-                  {formatDate(
-                    risk.riskDate
-                  )}
-                </strong>
-              </div>
-
-              <div>
-                <span>
-                  Projected Balance
-                </span>
-
-                <strong>
-                  {formatCurrency(
-                    risk.projectedBalance
-                  )}
-                </strong>
-              </div>
+              <strong>
+                {formatCurrency(
+                  risk.projectedBalance
+                )}
+              </strong>
 
             </div>
 
           </div>
 
         </section>
-      )}
 
+      )}
 
       {/* =====================================================
           CHARTS
@@ -1057,10 +1329,10 @@ function Dashboard() {
 
           </div>
 
-
           <div className="chart-container">
 
-            {projectionChartData.length > 0 ? (
+            {projectionChartData.length >
+            0 ? (
 
               <ResponsiveContainer
                 width="100%"
@@ -1068,64 +1340,46 @@ function Dashboard() {
               >
 
                 <LineChart
-                  data={projectionChartData}
-                  margin={{
-                    top: 10,
-                    right: 20,
-                    left: 10,
-                    bottom: 10,
-                  }}
+                  data={
+                    projectionChartData
+                  }
                 >
 
                   <CartesianGrid
                     strokeDasharray="3 3"
-                    stroke="#e5e7eb"
                   />
 
                   <XAxis
                     dataKey="date"
-                    tick={{
-                      fontSize: 12,
-                    }}
                   />
 
                   <YAxis
-                    tick={{
-                      fontSize: 12,
-                    }}
-                    tickFormatter={(value) =>
-                      `₹${(
-                        Number(value) /
-                        1000
-                      ).toLocaleString(
-                        "en-IN"
-                      )}k`
+                    tickFormatter={
+                      (value) =>
+                        `₹${(
+                          Number(value) /
+                          1000
+                        ).toLocaleString(
+                          "en-IN"
+                        )}k`
                     }
                   />
 
                   <Tooltip
                     formatter={(value) =>
-                      formatCurrency(value)
+                      formatCurrency(
+                        value
+                      )
                     }
                   />
-
-                  <Legend />
 
                   <Line
                     type="monotone"
                     dataKey="balance"
                     name="Projected Balance"
-                    stroke="#4f46e5"
+                    stroke="#2563eb"
                     strokeWidth={3}
-                    dot={{
-                      r: 5,
-                      fill: "#ffffff",
-                      stroke: "#4f46e5",
-                      strokeWidth: 3,
-                    }}
-                    activeDot={{
-                      r: 7,
-                    }}
+                    dot={{ r: 5 }}
                   />
 
                 </LineChart>
@@ -1135,7 +1389,7 @@ function Dashboard() {
             ) : (
 
               <EmptyChart
-                text="No upcoming cash flows"
+                text="No projection data"
               />
 
             )}
@@ -1143,7 +1397,6 @@ function Dashboard() {
           </div>
 
         </div>
-
 
         {/* PIE */}
 
@@ -1169,7 +1422,6 @@ function Dashboard() {
 
           </div>
 
-
           <div className="pie-container">
 
             {pieData.length > 0 ? (
@@ -1187,22 +1439,20 @@ function Dashboard() {
                     nameKey="name"
                     cx="50%"
                     cy="45%"
-                    outerRadius={95}
-                    innerRadius={55}
+                    outerRadius={105}
+                    innerRadius={60}
                     paddingAngle={
                       pieData.length > 1
-                        ? 4
+                        ? 5
                         : 0
                     }
-                    labelLine={false}
                   >
 
                     {pieData.map(
                       (entry, index) => (
+
                         <Cell
-                          key={
-                            `cell-${index}`
-                          }
+                          key={`cell-${index}`}
                           fill={
                             entry.name ===
                             "Income"
@@ -1210,6 +1460,7 @@ function Dashboard() {
                               : "#dc2626"
                           }
                         />
+
                       )
                     )}
 
@@ -1217,7 +1468,9 @@ function Dashboard() {
 
                   <Tooltip
                     formatter={(value) =>
-                      formatCurrency(value)
+                      formatCurrency(
+                        value
+                      )
                     }
                   />
 
@@ -1250,7 +1503,6 @@ function Dashboard() {
 
       </section>
 
-
       {/* =====================================================
           TRANSACTION HISTORY
           ===================================================== */}
@@ -1270,17 +1522,18 @@ function Dashboard() {
             </h2>
 
             <p>
-              Income and expenses entered by the user
+              Income and expenses that have
+              already happened
             </p>
 
           </div>
 
         </div>
 
-
         <div className="transaction-list">
 
-          {transactions.length === 0 ? (
+          {transactions.length ===
+          0 ? (
 
             <div className="empty-list">
               No transactions recorded yet.
@@ -1299,74 +1552,97 @@ function Dashboard() {
                     a.transactionDate
                   )
               )
-              .map((transaction) => {
+              .map(
+                (transaction) => {
 
-                const income =
-                  transaction.type ===
-                  "INCOME";
+                  const income =
+                    transaction.type ===
+                    "INCOME";
 
-                return (
-                  <div
-                    className="transaction-row"
-                    key={transaction.id}
-                  >
+                  return (
 
-                    <div>
+                    <div
+                      className="transaction-row"
+                      key={
+                        transaction.id
+                      }
+                    >
 
-                      <strong>
-                        {transaction.description}
+                      <div>
+
+                        <strong>
+                          {
+                            transaction.description
+                          }
+                        </strong>
+
+                        <span>
+                          {income
+                            ? "Income"
+                            : "Expense"}
+                          {" • "}
+                          {formatDate(
+                            transaction.transactionDate
+                          )}
+                        </span>
+
+                      </div>
+
+                      <strong
+                        className={
+                          income
+                            ? "amount-positive"
+                            : "amount-negative"
+                        }
+                      >
+                        {income
+                          ? "+"
+                          : "-"}
+
+                        {formatCurrency(
+                          transaction.amount
+                        )}
                       </strong>
 
-                      <span>
-                        {income
-                          ? "Income"
-                          : "Expense"}
+                      <div className="row-actions">
 
-                        {" • "}
+                        <button
+                          className="secondary-button"
+                          onClick={() =>
+                            startTransactionEdit(
+                              transaction
+                            )
+                          }
+                          disabled={saving}
+                        >
+                          Edit
+                        </button>
 
-                        {formatDateTime(
-                          transaction.transactionDate
-                        )}
-                      </span>
+                        <button
+                          className="delete-button"
+                          onClick={() =>
+                            handleTransactionDelete(
+                              transaction.id
+                            )
+                          }
+                          disabled={saving}
+                        >
+                          Delete
+                        </button>
+
+                      </div>
 
                     </div>
 
-
-                    <strong
-                      className={
-                        income
-                          ? "amount-positive"
-                          : "amount-negative"
-                      }
-                    >
-                      {income ? "+" : "-"}
-                      {formatCurrency(
-                        transaction.amount
-                      )}
-                    </strong>
-
-
-                    <button
-                      className="delete-button"
-                      onClick={() =>
-                        handleTransactionDelete(
-                          transaction.id
-                        )
-                      }
-                    >
-                      Delete
-                    </button>
-
-                  </div>
-                );
-              })
+                  );
+                }
+              )
 
           )}
 
         </div>
 
       </section>
-
 
       {/* =====================================================
           UPCOMING EVENTS
@@ -1387,14 +1663,15 @@ function Dashboard() {
             </h2>
 
             <p>
-              Future income and expenses
-              affecting projected balance
+              Future income and expenses affecting
+              projected balance
             </p>
 
           </div>
 
+          {obligations.length >
+            0 && (
 
-          {obligations.length > 0 && (
             <button
               className="danger-outline"
               onClick={
@@ -1404,18 +1681,27 @@ function Dashboard() {
             >
               Clear All
             </button>
+
           )}
 
         </div>
 
+        {/* ADD / EDIT FUTURE CASH FLOW */}
 
-        {/* ADD FUTURE CASH FLOW */}
-
-        <div className="management-card timeline-form-card">
+        <div
+          id="future-cash-flow-form"
+          className="management-card timeline-form-card"
+        >
 
           <h3>
-            Add future cash flow
+            {editingObligationId
+              ? "Edit Future Cash Flow"
+              : "Add future cash flow"}
           </h3>
+
+          <p>
+            Only dates after today are allowed here.
+          </p>
 
           <form
             className="entry-form"
@@ -1425,7 +1711,9 @@ function Dashboard() {
           >
 
             <select
-              value={obligationForm.type}
+              value={
+                obligationForm.type
+              }
               onChange={(event) =>
                 setObligationForm({
                   ...obligationForm,
@@ -1445,7 +1733,6 @@ function Dashboard() {
 
             </select>
 
-
             <input
               type="number"
               min="0.01"
@@ -1463,7 +1750,6 @@ function Dashboard() {
               placeholder="Amount"
             />
 
-
             <input
               type="text"
               value={
@@ -1479,9 +1765,9 @@ function Dashboard() {
               placeholder="Description"
             />
 
-
             <input
               type="date"
+              min={getTomorrowDate()}
               value={
                 obligationForm.dueDate
               }
@@ -1494,24 +1780,40 @@ function Dashboard() {
               }
             />
 
-
             <button
               type="submit"
               disabled={saving}
             >
-              Add
+              {editingObligationId
+                ? "Update"
+                : "Add"}
             </button>
+
+            {editingObligationId && (
+
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={
+                  cancelObligationEdit
+                }
+                disabled={saving}
+              >
+                Cancel
+              </button>
+
+            )}
 
           </form>
 
         </div>
 
-
         {/* TIMELINE */}
 
         <div className="timeline-card">
 
-          {projection.length === 0 ? (
+          {projection.length ===
+          0 ? (
 
             <div className="empty-list">
               No upcoming cash flows.
@@ -1523,27 +1825,35 @@ function Dashboard() {
               (item, index) => {
 
                 const positive =
-                  Number(item.change) >= 0;
+                  Number(
+                    item.change
+                  ) >= 0;
 
                 const obligation =
                   obligations.find(
                     (o) =>
                       o.description ===
                         item.description &&
-                      String(o.dueDate) ===
-                        String(item.date)
+                      String(
+                        o.dueDate
+                      ) ===
+                        String(
+                          item.date
+                        )
                   );
 
                 return (
+
                   <div
                     className="timeline-item"
                     key={`${item.date}-${index}`}
                   >
 
                     <div className="timeline-date">
-                      {formatDate(item.date)}
+                      {formatDate(
+                        item.date
+                      )}
                     </div>
-
 
                     <div
                       className={`timeline-dot ${
@@ -1553,13 +1863,14 @@ function Dashboard() {
                       }`}
                     />
 
-
                     <div className="timeline-content">
 
                       <div>
 
                         <h3>
-                          {item.description}
+                          {
+                            item.description
+                          }
                         </h3>
 
                         <p>
@@ -1569,7 +1880,6 @@ function Dashboard() {
                         </p>
 
                       </div>
-
 
                       <div className="timeline-amount">
 
@@ -1596,18 +1906,48 @@ function Dashboard() {
                           )}
                         </span>
 
-
                         {obligation && (
-                          <button
-                            className="delete-button"
-                            onClick={() =>
-                              handleObligationDelete(
-                                obligation.id
-                              )
-                            }
-                          >
-                            Delete
-                          </button>
+
+                          <div className="row-actions">
+
+                            <button
+                              className="secondary-button"
+                              onClick={() =>
+                                startObligationEdit(
+                                  obligation
+                                )
+                              }
+                              disabled={saving}
+                            >
+                              Edit
+                            </button>
+
+                            <button
+                              className="complete-button"
+                              onClick={() =>
+                                handleObligationDone(
+                                  obligation
+                                )
+                              }
+                              disabled={saving}
+                            >
+                              Mark as Done
+                            </button>
+
+                            <button
+                              className="delete-button"
+                              onClick={() =>
+                                handleObligationDelete(
+                                  obligation.id
+                                )
+                              }
+                              disabled={saving}
+                            >
+                              Delete
+                            </button>
+
+                          </div>
+
                         )}
 
                       </div>
@@ -1615,6 +1955,7 @@ function Dashboard() {
                     </div>
 
                   </div>
+
                 );
               }
             )
@@ -1625,12 +1966,12 @@ function Dashboard() {
 
       </section>
 
-
       {/* =====================================================
           RECOMMENDATIONS
           ===================================================== */}
 
-      {recommendations.length > 0 && (
+      {recommendations.length >
+        0 && (
 
         <section className="section">
 
@@ -1647,14 +1988,12 @@ function Dashboard() {
               </h2>
 
               <p>
-                Practical steps based on
-                your projected cash position
+                Based on your projected cash position
               </p>
 
             </div>
 
           </div>
-
 
           <div className="recommendations-grid">
 
@@ -1676,23 +2015,24 @@ function Dashboard() {
                       {item.priority}
                     </span>
 
-                    <span className="recommendation-number">
+                    <span>
                       {String(
                         index + 1
-                      ).padStart(2, "0")}
+                      ).padStart(
+                        2,
+                        "0"
+                      )}
                     </span>
 
                   </div>
-
 
                   <h3>
                     {item.title}
                   </h3>
 
+                  <div>
 
-                  <div className="recommendation-reason">
-
-                    <span>
+                    <span className="label">
                       Why
                     </span>
 
@@ -1702,10 +2042,9 @@ function Dashboard() {
 
                   </div>
 
+                  <div>
 
-                  <div className="recommendation-action">
-
-                    <span>
+                    <span className="label">
                       Action
                     </span>
 
@@ -1725,7 +2064,6 @@ function Dashboard() {
         </section>
 
       )}
-
 
       {/* =====================================================
           AI
@@ -1760,31 +2098,38 @@ function Dashboard() {
 
           </div>
 
-
           <div className="ai-grid">
 
             <AIBox
               label="SUMMARY"
               title="What's happening?"
-              text={aiData.summary}
+              text={
+                aiData.summary
+              }
             />
 
             <AIBox
               label="RISK EXPLANATION"
               title="Why is this happening?"
-              text={aiData.riskExplanation}
+              text={
+                aiData.riskExplanation
+              }
             />
 
             <AIBox
               label="PRIORITY ACTION"
               title="What should you do first?"
-              text={aiData.priorityAction}
+              text={
+                aiData.priorityAction
+              }
             />
 
             <AIBox
               label="OUTLOOK"
               title="What happens next?"
-              text={aiData.outlook}
+              text={
+                aiData.outlook
+              }
             />
 
           </div>
@@ -1793,24 +2138,14 @@ function Dashboard() {
 
       )}
 
-
-      {/* FOOTER */}
-
       <footer className="dashboard-footer">
 
-        <div>
-          <strong>
-            CashPilot
-          </strong>
-
-          <span>
-            AI-powered financial intelligence
-          </span>
-        </div>
+        <strong>
+          CashPilot
+        </strong>
 
         <span>
-          Cash flow insights generated
-          from your current data
+          AI-powered financial intelligence
         </span>
 
       </footer>
@@ -1819,9 +2154,8 @@ function Dashboard() {
   );
 }
 
-
 /* =========================================================
-   SUMMARY CARD
+   COMPONENTS
    ========================================================= */
 
 function SummaryCard({
@@ -1829,20 +2163,13 @@ function SummaryCard({
   value,
   subtitle,
   primary = false,
-  income = false,
-  expense = false,
-  net = false,
 }) {
+
   return (
+
     <div
       className={`summary-card ${
         primary ? "primary" : ""
-      } ${
-        income ? "income-card" : ""
-      } ${
-        expense ? "expense-card" : ""
-      } ${
-        net ? "net-card" : ""
       }`}
     >
 
@@ -1851,13 +2178,14 @@ function SummaryCard({
       </span>
 
       <strong className="summary-value">
-        {net
-          ? formatSignedCurrencyStatic(
-              value
-            )
-          : formatCurrencyStatic(
-              value
-            )}
+        {`₹${Number(
+          value || 0
+        ).toLocaleString(
+          "en-IN",
+          {
+            maximumFractionDigits: 2,
+          }
+        )}`}
       </strong>
 
       <span className="summary-subtitle">
@@ -1868,12 +2196,10 @@ function SummaryCard({
   );
 }
 
+function EmptyChart({
+  text,
+}) {
 
-/* =========================================================
-   EMPTY CHART
-   ========================================================= */
-
-function EmptyChart({ text }) {
   return (
     <div className="empty-chart">
       {text}
@@ -1881,17 +2207,14 @@ function EmptyChart({ text }) {
   );
 }
 
-
-/* =========================================================
-   AI BOX
-   ========================================================= */
-
 function AIBox({
   label,
   title,
   text,
 }) {
+
   return (
+
     <div className="ai-card">
 
       <div className="ai-card-icon">
@@ -1919,70 +2242,102 @@ function AIBox({
   );
 }
 
-
-/* =========================================================
-   STATIC FORMATTERS
-   ========================================================= */
-
-function formatCurrencyStatic(value) {
-  return `₹${Number(
-    value || 0
-  ).toLocaleString("en-IN", {
-    maximumFractionDigits: 2,
-  })}`;
-}
-
-
-function formatSignedCurrencyStatic(value) {
-  const number = Number(
-    value || 0
-  );
-
-  return `${number >= 0 ? "+" : "-"}₹${Math.abs(
-    number
-  ).toLocaleString("en-IN", {
-    maximumFractionDigits: 2,
-  })}`;
-}
-
-
 /* =========================================================
    DATE HELPERS
    ========================================================= */
 
 function getLocalDateTime() {
-  const now = new Date();
+
+  const now =
+    new Date();
 
   const offset =
     now.getTimezoneOffset();
 
-  const local = new Date(
-    now.getTime() -
-      offset * 60 * 1000
-  );
+  const local =
+    new Date(
+      now.getTime() -
+        offset * 60 * 1000
+    );
 
   return local
     .toISOString()
     .slice(0, 16);
 }
 
-
 function getTodayDate() {
-  const now = new Date();
 
-  const year =
-    now.getFullYear();
+  const now =
+    new Date();
 
-  const month = String(
-    now.getMonth() + 1
-  ).padStart(2, "0");
+  const offset =
+    now.getTimezoneOffset();
 
-  const day = String(
-    now.getDate()
-  ).padStart(2, "0");
+  const local =
+    new Date(
+      now.getTime() -
+        offset * 60 * 1000
+    );
 
-  return `${year}-${month}-${day}`;
+  return local
+    .toISOString()
+    .slice(0, 10);
 }
 
+function getTomorrowDate() {
+
+  const now =
+    new Date();
+
+  now.setDate(
+    now.getDate() + 1
+  );
+
+  const offset =
+    now.getTimezoneOffset();
+
+  const local =
+    new Date(
+      now.getTime() -
+        offset * 60 * 1000
+    );
+
+  return local
+    .toISOString()
+    .slice(0, 10);
+}
+
+function toLocalDateTimeInput(
+  value
+) {
+
+  if (!value) {
+    return getLocalDateTime();
+  }
+
+  const date =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return getLocalDateTime();
+  }
+
+  const offset =
+    date.getTimezoneOffset();
+
+  const local =
+    new Date(
+      date.getTime() -
+        offset * 60 * 1000
+    );
+
+  return local
+    .toISOString()
+    .slice(0, 16);
+}
 
 export default Dashboard;

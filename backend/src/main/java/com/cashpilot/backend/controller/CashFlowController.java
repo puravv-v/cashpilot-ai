@@ -1,17 +1,15 @@
 package com.cashpilot.backend.controller;
 
-import com.cashpilot.backend.dto.AIAnalysisRequest;
-import com.cashpilot.backend.dto.AIAnalysisResponse;
+import com.cashpilot.backend.dto.CashFlowProjection;
 import com.cashpilot.backend.dto.CashFlowRisk;
+import com.cashpilot.backend.dto.CashFlowSummary;
 import com.cashpilot.backend.dto.FinancialRecommendation;
-import com.cashpilot.backend.service.AIAnalysisService;
 import com.cashpilot.backend.service.CashObligationService;
 import com.cashpilot.backend.service.TransactionService;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.math.BigDecimal;
 import java.util.List;
 
 @RestController
@@ -21,46 +19,51 @@ public class CashFlowController {
 
     private final TransactionService transactionService;
     private final CashObligationService cashObligationService;
-    private final AIAnalysisService aiAnalysisService;
 
     public CashFlowController(
             TransactionService transactionService,
-            CashObligationService cashObligationService,
-            AIAnalysisService aiAnalysisService) {
+            CashObligationService cashObligationService) {
 
         this.transactionService = transactionService;
         this.cashObligationService = cashObligationService;
-        this.aiAnalysisService = aiAnalysisService;
     }
 
     @GetMapping("/summary")
-    public ResponseEntity<?> getSummary() {
+    public ResponseEntity<CashFlowSummary> getSummary() {
 
         return ResponseEntity.ok(
                 transactionService.getCashFlowSummary()
         );
     }
 
-    @PostMapping("/ai-analysis")
-    public ResponseEntity<AIAnalysisResponse> getAIAnalysis(
-            @RequestParam BigDecimal currentCash) {
+    @GetMapping("/projection")
+    public ResponseEntity<List<CashFlowProjection>> getProjection() {
 
-        CashFlowRisk risk =
-                cashObligationService.detectCashFlowRisk(currentCash);
+        return ResponseEntity.ok(
+                cashObligationService.getCashFlowProjection(
+                        transactionService.getCurrentCash()
+                )
+        );
+    }
 
-        List<FinancialRecommendation> recommendations =
-                cashObligationService.getRecommendations(currentCash);
+    @GetMapping("/risk")
+    public ResponseEntity<CashFlowRisk> getRisk() {
 
-        AIAnalysisRequest request =
-                new AIAnalysisRequest(
-                        currentCash,
-                        risk,
-                        recommendations
-                );
+        return ResponseEntity.ok(
+                cashObligationService.detectCashFlowRisk(
+                        transactionService.getCurrentCash()
+                )
+        );
+    }
 
-        AIAnalysisResponse response =
-                aiAnalysisService.analyze(request);
+    @GetMapping("/recommendations")
+    public ResponseEntity<List<FinancialRecommendation>>
+    getRecommendations() {
 
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(
+                cashObligationService.getRecommendations(
+                        transactionService.getCurrentCash()
+                )
+        );
     }
 }
