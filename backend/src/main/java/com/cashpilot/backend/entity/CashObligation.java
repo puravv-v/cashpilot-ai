@@ -30,6 +30,10 @@ public class CashObligation {
     @NotNull
     private LocalDate dueDate;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    private User user;
+
     public CashObligation() {
     }
 
@@ -63,6 +67,10 @@ public class CashObligation {
         return dueDate;
     }
 
+    public User getUser() {
+        return user;
+    }
+
     public void setId(Long id) {
         this.id = id;
     }
@@ -81,5 +89,9 @@ public class CashObligation {
 
     public void setDueDate(LocalDate dueDate) {
         this.dueDate = dueDate;
+    }
+
+    public void setUser(User user) {
+        this.user = user;
     }
 }

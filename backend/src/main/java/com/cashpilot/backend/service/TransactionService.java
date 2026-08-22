@@ -3,7 +3,9 @@ package com.cashpilot.backend.service;
 import com.cashpilot.backend.dto.CashFlowSummary;
 import com.cashpilot.backend.entity.Transaction;
 import com.cashpilot.backend.entity.TransactionType;
+import com.cashpilot.backend.entity.User;
 import com.cashpilot.backend.repository.TransactionRepository;
+
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -15,18 +17,27 @@ public class TransactionService {
 
     private final TransactionRepository transactionRepository;
     private final CashSettingsService cashSettingsService;
+    private final AuthenticatedUserService authenticatedUserService;
 
     public TransactionService(
             TransactionRepository transactionRepository,
-            CashSettingsService cashSettingsService) {
+            CashSettingsService cashSettingsService,
+            AuthenticatedUserService authenticatedUserService) {
 
         this.transactionRepository = transactionRepository;
         this.cashSettingsService = cashSettingsService;
+        this.authenticatedUserService = authenticatedUserService;
     }
 
-    public Transaction createTransaction(Transaction transaction) {
+    public Transaction createTransaction(
+            Transaction transaction) {
 
         validateTransaction(transaction);
+
+        User currentUser =
+                authenticatedUserService.getCurrentUser();
+
+        transaction.setUser(currentUser);
 
         return transactionRepository.save(transaction);
     }
@@ -37,17 +48,30 @@ public class TransactionService {
 
         validateTransaction(updatedTransaction);
 
+        User currentUser =
+                authenticatedUserService.getCurrentUser();
+
         Transaction existing =
-                transactionRepository.findById(id)
+                transactionRepository
+                        .findByIdAndUser(id, currentUser)
                         .orElseThrow(() ->
                                 new IllegalArgumentException(
                                         "Transaction not found."
                                 )
                         );
 
-        existing.setAmount(updatedTransaction.getAmount());
-        existing.setType(updatedTransaction.getType());
-        existing.setDescription(updatedTransaction.getDescription());
+        existing.setAmount(
+                updatedTransaction.getAmount()
+        );
+
+        existing.setType(
+                updatedTransaction.getType()
+        );
+
+        existing.setDescription(
+                updatedTransaction.getDescription()
+        );
+
         existing.setTransactionDate(
                 updatedTransaction.getTransactionDate()
         );
@@ -56,14 +80,32 @@ public class TransactionService {
     }
 
     public List<Transaction> getAllTransactions() {
-        return transactionRepository.findAll();
+
+        User currentUser =
+                authenticatedUserService.getCurrentUser();
+
+        return transactionRepository.findByUser(currentUser);
     }
 
     public void deleteTransaction(Long id) {
-        transactionRepository.deleteById(id);
+
+        User currentUser =
+                authenticatedUserService.getCurrentUser();
+
+        Transaction transaction =
+                transactionRepository
+                        .findByIdAndUser(id, currentUser)
+                        .orElseThrow(() ->
+                                new IllegalArgumentException(
+                                        "Transaction not found."
+                                )
+                        );
+
+        transactionRepository.delete(transaction);
     }
 
-    private void validateTransaction(Transaction transaction) {
+    private void validateTransaction(
+            Transaction transaction) {
 
         if (transaction == null) {
             throw new IllegalArgumentException(
@@ -87,7 +129,9 @@ public class TransactionService {
         }
 
         if (transaction.getDescription() == null ||
-                transaction.getDescription().trim().isEmpty()) {
+                transaction.getDescription()
+                        .trim()
+                        .isEmpty()) {
 
             throw new IllegalArgumentException(
                     "Transaction description is required."
@@ -100,9 +144,6 @@ public class TransactionService {
             );
         }
 
-        /*
-         * Recorded transactions can only be today or in the past.
-         */
         if (transaction.getTransactionDate()
                 .isAfter(LocalDateTime.now())) {
 
@@ -114,9 +155,15 @@ public class TransactionService {
 
     public BigDecimal getTotalIncome() {
 
-        return transactionRepository.findAll()
+        User currentUser =
+                authenticatedUserService.getCurrentUser();
+
+        return transactionRepository
+                .findByUserAndType(
+                        currentUser,
+                        TransactionType.INCOME
+                )
                 .stream()
-                .filter(t -> t.getType() == TransactionType.INCOME)
                 .map(Transaction::getAmount)
                 .reduce(
                         BigDecimal.ZERO,
@@ -126,9 +173,15 @@ public class TransactionService {
 
     public BigDecimal getTotalExpenses() {
 
-        return transactionRepository.findAll()
+        User currentUser =
+                authenticatedUserService.getCurrentUser();
+
+        return transactionRepository
+                .findByUserAndType(
+                        currentUser,
+                        TransactionType.EXPENSE
+                )
                 .stream()
-                .filter(t -> t.getType() == TransactionType.EXPENSE)
                 .map(Transaction::getAmount)
                 .reduce(
                         BigDecimal.ZERO,

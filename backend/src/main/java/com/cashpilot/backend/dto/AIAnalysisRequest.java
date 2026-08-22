@@ -6,19 +6,17 @@ import java.util.List;
 public class AIAnalysisRequest {
 
     private BigDecimal currentCash;
+    private BigDecimal startingCash;
+    private BigDecimal totalIncome;
+    private BigDecimal totalExpenses;
+
+    private List<CashFlowProjection> projection;
+
     private CashFlowRisk risk;
+
     private List<FinancialRecommendation> recommendations;
 
     public AIAnalysisRequest() {
-    }
-
-    public AIAnalysisRequest(
-            BigDecimal currentCash,
-            CashFlowRisk risk,
-            List<FinancialRecommendation> recommendations) {
-        this.currentCash = currentCash;
-        this.risk = risk;
-        this.recommendations = recommendations;
     }
 
     public BigDecimal getCurrentCash() {
@@ -27,6 +25,40 @@ public class AIAnalysisRequest {
 
     public void setCurrentCash(BigDecimal currentCash) {
         this.currentCash = currentCash;
+    }
+
+    public BigDecimal getStartingCash() {
+        return startingCash;
+    }
+
+    public void setStartingCash(BigDecimal startingCash) {
+        this.startingCash = startingCash;
+    }
+
+    public BigDecimal getTotalIncome() {
+        return totalIncome;
+    }
+
+    public void setTotalIncome(BigDecimal totalIncome) {
+        this.totalIncome = totalIncome;
+    }
+
+    public BigDecimal getTotalExpenses() {
+        return totalExpenses;
+    }
+
+    public void setTotalExpenses(BigDecimal totalExpenses) {
+        this.totalExpenses = totalExpenses;
+    }
+
+    public List<CashFlowProjection> getProjection() {
+        return projection;
+    }
+
+    public void setProjection(
+        List<CashFlowProjection> projection
+    ) {
+        this.projection = projection;
     }
 
     public CashFlowRisk getRisk() {
@@ -41,7 +73,10 @@ public class AIAnalysisRequest {
         return recommendations;
     }
 
-    public void setRecommendations(List<FinancialRecommendation> recommendations) {
-        this.recommendations = recommendations;
+    public void setRecommendations(
+        List<FinancialRecommendation> recommendations
+    ) {
+        this.recommendations =
+            recommendations;
     }
 }

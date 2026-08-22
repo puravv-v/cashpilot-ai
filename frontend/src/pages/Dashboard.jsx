@@ -8,19 +8,19 @@ import {
   getCashFlowSummary,
   getCashFlowProjection,
   getCashFlowRisk,
-  getRecommendations,
   getAIAnalysis,
+
   getTransactions,
   createTransaction,
   updateTransaction,
   deleteTransaction,
+
   getObligations,
   createObligation,
   updateObligation,
   markObligationAsDone,
   deleteObligation,
   deleteAllObligations,
-  updateStartingCash,
 } from "../services/api";
 
 import {
@@ -39,8 +39,15 @@ import {
 
 import "./Dashboard.css";
 
-function Dashboard() {
+const INCOME_COLOR = "#16a34a";
+const EXPENSE_COLOR = "#dc2626";
+const PRIMARY_COLOR = "#2563eb";
 
+function Dashboard({
+  token,
+  onSessionExpired,
+  onLogout,
+}) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -52,27 +59,13 @@ function Dashboard() {
     netCashFlow: 0,
   });
 
-  const [transactions, setTransactions] =
-    useState([]);
-
-  const [obligations, setObligations] =
-    useState([]);
-
-  const [projection, setProjection] =
-    useState([]);
-
+  const [transactions, setTransactions] = useState([]);
+  const [obligations, setObligations] = useState([]);
+  const [projection, setProjection] = useState([]);
   const [risk, setRisk] = useState(null);
-
-  const [recommendations, setRecommendations] =
-    useState([]);
-
   const [aiData, setAiData] = useState(null);
 
-  const [saving, setSaving] =
-    useState(false);
-
-  const [startingCashInput, setStartingCashInput] =
-    useState("");
+  const [saving, setSaving] = useState(false);
 
   const [editingTransactionId, setEditingTransactionId] =
     useState(null);
@@ -82,16 +75,16 @@ function Dashboard() {
 
   const [transactionForm, setTransactionForm] =
     useState({
-      amount: "",
       type: "INCOME",
+      amount: "",
       description: "",
       transactionDate: getLocalDateTime(),
     });
 
   const [obligationForm, setObligationForm] =
     useState({
-      amount: "",
       type: "EXPENSE",
+      amount: "",
       description: "",
       dueDate: getTomorrowDate(),
     });
@@ -100,47 +93,38 @@ function Dashboard() {
     loadDashboard();
   }, []);
 
-  /* =====================================================
-     LOAD DASHBOARD
-     ===================================================== */
+  /*
+   * =========================================================
+   * LOAD DASHBOARD
+   * =========================================================
+   */
 
   async function loadDashboard() {
-
     try {
-
       setLoading(true);
       setError("");
 
       /*
-       * Summary must be loaded first because projection,
-       * risk and recommendations depend on CURRENT CASH.
+       * Summary is loaded first because current cash is used
+       * by projection and risk calculations.
        */
       const summaryData =
         await getCashFlowSummary();
 
-      const currentCash =
-        Number(
-          summaryData?.currentCash || 0
-        );
+      const currentCash = Number(
+        summaryData?.currentCash || 0
+      );
 
       const [
         transactionData,
         obligationData,
         projectionData,
         riskData,
-        recommendationData,
       ] = await Promise.all([
         getTransactions(),
         getObligations(),
-        getCashFlowProjection(
-          currentCash
-        ),
-        getCashFlowRisk(
-          currentCash
-        ),
-        getRecommendations(
-          currentCash
-        ),
+        getCashFlowProjection(currentCash),
+        getCashFlowRisk(currentCash),
       ]);
 
       const cleanTransactions =
@@ -156,90 +140,59 @@ function Dashboard() {
       const cleanProjection =
         Array.isArray(projectionData)
           ? projectionData
-          : [];
+          : projectionData?.value || [];
 
-      const cleanRecommendations =
-        Array.isArray(recommendationData)
-          ? recommendationData
-          : [];
+      const totalIncome = Number(
+        summaryData?.totalIncome || 0
+      );
+
+      const totalExpenses = Number(
+        summaryData?.totalExpenses || 0
+      );
+
+      const netCashFlow = Number(
+        summaryData?.netCashFlow ??
+          totalIncome - totalExpenses
+      );
 
       setSummary({
         startingCash: Number(
           summaryData?.startingCash || 0
         ),
         currentCash,
-        totalIncome: Number(
-          summaryData?.totalIncome || 0
-        ),
-        totalExpenses: Number(
-          summaryData?.totalExpenses || 0
-        ),
-        netCashFlow: Number(
-          summaryData?.netCashFlow || 0
-        ),
+        totalIncome,
+        totalExpenses,
+        netCashFlow,
       });
 
-      setStartingCashInput(
-        summaryData?.startingCash ?? ""
-      );
-
-      setTransactions(
-        cleanTransactions
-      );
-
-      setObligations(
-        cleanObligations
-      );
-
-      setProjection(
-        cleanProjection
-      );
-
+      setTransactions(cleanTransactions);
+      setObligations(cleanObligations);
+      setProjection(cleanProjection);
       setRisk(riskData);
 
-      setRecommendations(
-        cleanRecommendations
-      );
-
       /*
-       * AI is optional. If it fails, the rest of the
-       * dashboard still works.
+       * AI is optional.
+       *
+       * If AI fails, the financial dashboard still works.
        */
       try {
-
-        const aiResponse =
-          await getAIAnalysis({
-            currentCash,
-            startingCash: Number(
-              summaryData?.startingCash || 0
-            ),
-            totalIncome: Number(
-              summaryData?.totalIncome || 0
-            ),
-            totalExpenses: Number(
-              summaryData?.totalExpenses || 0
-            ),
-            projection:
-              cleanProjection,
-            risk: riskData,
-            recommendations:
-              cleanRecommendations,
-          });
+        const aiResponse = await getAIAnalysis({
+          currentCash,
+          projection: cleanProjection,
+          risk: riskData,
+          recommendations: [],
+        });
 
         setAiData(aiResponse);
-
       } catch (aiError) {
-
         console.error(
           "AI analysis failed:",
-          aiError
+          aiError?.response?.data || aiError
         );
 
         setAiData(null);
       }
-
     } catch (err) {
-
       console.error(
         "Dashboard loading error:",
         err
@@ -250,145 +203,109 @@ function Dashboard() {
         err?.response?.data
       );
 
+      /*
+       * IMPORTANT:
+       * Do NOT just display "session expired".
+       *
+       * App.jsx owns authentication state.
+       * Tell App.jsx to remove the token and show Login.
+       */
+      if (
+        err?.response?.status === 401 ||
+        err?.response?.status === 403
+      ) {
+        setError(
+          "Your session has expired. Please log in again."
+        );
+
+        if (typeof onSessionExpired === "function") {
+          onSessionExpired();
+        }
+
+        return;
+      }
+
       setError(
         err?.response?.data?.message ||
-        err?.response?.data?.error ||
-        "Unable to load CashPilot data."
+          err?.response?.data?.error ||
+          "Unable to load CashPilot data."
       );
-
     } finally {
-
       setLoading(false);
     }
   }
 
-  /* =====================================================
-     STARTING CASH
-     ===================================================== */
+  /*
+   * =========================================================
+   * LOGOUT
+   * =========================================================
+   *
+   * DO NOT use react-router-dom.
+   * App.jsx already controls Login/Dashboard rendering.
+   */
 
-  async function handleStartingCashSubmit(
-    event
-  ) {
-
-    event.preventDefault();
-
-    const amount =
-      Number(startingCashInput);
-
-    if (
-      !Number.isFinite(amount) ||
-      amount < 0
-    ) {
-      alert(
-        "Enter a valid starting cash amount."
-      );
-      return;
-    }
-
-    try {
-
-      setSaving(true);
-
-      await updateStartingCash(
-        amount
-      );
-
-      await loadDashboard();
-
-    } catch (err) {
-
-      console.error(err);
-
-      alert(
-        err?.response?.data?.message ||
-        err?.response?.data?.error ||
-        "Unable to update starting cash."
-      );
-
-    } finally {
-
-      setSaving(false);
+  function handleLogout() {
+    if (typeof onLogout === "function") {
+      onLogout();
     }
   }
 
-  /* =====================================================
-     TRANSACTIONS
-     ===================================================== */
+  /*
+   * =========================================================
+   * RECORDED TRANSACTIONS
+   * =========================================================
+   */
 
-  function startTransactionEdit(
-    transaction
-  ) {
-
-    setEditingTransactionId(
-      transaction.id
-    );
+  function startTransactionEdit(transaction) {
+    setEditingTransactionId(transaction.id);
 
     setTransactionForm({
-      amount:
-        transaction.amount ?? "",
-      type:
-        transaction.type || "INCOME",
-      description:
-        transaction.description || "",
-      transactionDate:
-        toLocalDateTimeInput(
-          transaction.transactionDate
-        ),
+      type: transaction.type || "INCOME",
+      amount: transaction.amount ?? "",
+      description: transaction.description || "",
+      transactionDate: toLocalDateTimeInput(
+        transaction.transactionDate
+      ),
     });
 
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    });
+    document
+      .getElementById("add-cash-flow-form")
+      ?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
   }
 
   function cancelTransactionEdit() {
-
     setEditingTransactionId(null);
 
     setTransactionForm({
-      amount: "",
       type: "INCOME",
+      amount: "",
       description: "",
-      transactionDate:
-        getLocalDateTime(),
+      transactionDate: getLocalDateTime(),
     });
   }
 
-  async function handleTransactionSubmit(
-    event
-  ) {
-
+  async function handleTransactionSubmit(event) {
     event.preventDefault();
 
-    const amount =
-      Number(transactionForm.amount);
+    const amount = Number(
+      transactionForm.amount
+    );
 
-    if (
-      !Number.isFinite(amount) ||
-      amount <= 0
-    ) {
-      alert(
-        "Enter a valid transaction amount."
-      );
+    if (!Number.isFinite(amount) || amount <= 0) {
+      alert("Enter a valid transaction amount.");
       return;
     }
 
-    if (
-      !transactionForm.description.trim()
-    ) {
-      alert(
-        "Enter a description."
-      );
+    if (!transactionForm.description.trim()) {
+      alert("Enter a description.");
       return;
     }
 
-    if (
-      !transactionForm.transactionDate
-    ) {
-      alert(
-        "Select a transaction date."
-      );
+    if (!transactionForm.transactionDate) {
+      alert("Select a transaction date.");
       return;
     }
 
@@ -403,13 +320,11 @@ function Dashboard() {
     }
 
     try {
-
       setSaving(true);
 
       const payload = {
         amount,
-        type:
-          transactionForm.type,
+        type: transactionForm.type,
         description:
           transactionForm.description.trim(),
         transactionDate:
@@ -417,43 +332,31 @@ function Dashboard() {
       };
 
       if (editingTransactionId) {
-
         await updateTransaction(
           editingTransactionId,
           payload
         );
-
       } else {
-
-        await createTransaction(
-          payload
-        );
+        await createTransaction(payload);
       }
 
       cancelTransactionEdit();
 
       await loadDashboard();
-
     } catch (err) {
-
       console.error(err);
 
       alert(
         err?.response?.data?.message ||
-        err?.response?.data?.error ||
-        "Unable to save transaction."
+          err?.response?.data?.error ||
+          "Unable to save transaction."
       );
-
     } finally {
-
       setSaving(false);
     }
   }
 
-  async function handleTransactionDelete(
-    id
-  ) {
-
+  async function handleTransactionDelete(id) {
     if (
       !window.confirm(
         "Delete this transaction?"
@@ -463,109 +366,80 @@ function Dashboard() {
     }
 
     try {
-
       setSaving(true);
 
       await deleteTransaction(id);
 
       await loadDashboard();
-
     } catch (err) {
-
       console.error(err);
 
       alert(
-        "Unable to delete transaction."
+        err?.response?.data?.message ||
+          "Unable to delete transaction."
       );
-
     } finally {
-
       setSaving(false);
     }
   }
 
-  /* =====================================================
-     FUTURE CASH FLOWS
-     ===================================================== */
+  /*
+   * =========================================================
+   * FUTURE CASH FLOWS
+   * =========================================================
+   */
 
-  function startObligationEdit(
-    obligation
-  ) {
-
-    setEditingObligationId(
-      obligation.id
-    );
+  function startObligationEdit(obligation) {
+    setEditingObligationId(obligation.id);
 
     setObligationForm({
-      amount:
-        obligation.amount ?? "",
-      type:
-        obligation.type || "EXPENSE",
+      type: obligation.type || "EXPENSE",
+      amount: obligation.amount ?? "",
       description:
         obligation.description || "",
       dueDate:
-        obligation.dueDate || getTomorrowDate(),
+        obligation.dueDate ||
+        getTomorrowDate(),
     });
 
-    const element =
-      document.getElementById(
-        "future-cash-flow-form"
-      );
-
-    if (element) {
-      element.scrollIntoView({
+    document
+      .getElementById("future-cash-flow-form")
+      ?.scrollIntoView({
         behavior: "smooth",
         block: "center",
       });
-    }
   }
 
   function cancelObligationEdit() {
-
     setEditingObligationId(null);
 
     setObligationForm({
-      amount: "",
       type: "EXPENSE",
+      amount: "",
       description: "",
       dueDate: getTomorrowDate(),
     });
   }
 
-  async function handleObligationSubmit(
-    event
-  ) {
-
+  async function handleObligationSubmit(event) {
     event.preventDefault();
 
-    const amount =
-      Number(obligationForm.amount);
+    const amount = Number(
+      obligationForm.amount
+    );
 
-    if (
-      !Number.isFinite(amount) ||
-      amount <= 0
-    ) {
-      alert(
-        "Enter a valid amount."
-      );
+    if (!Number.isFinite(amount) || amount <= 0) {
+      alert("Enter a valid amount.");
       return;
     }
 
-    if (
-      !obligationForm.description.trim()
-    ) {
-      alert(
-        "Enter a description."
-      );
+    if (!obligationForm.description.trim()) {
+      alert("Enter a description.");
       return;
     }
 
-    if (
-      !obligationForm.dueDate
-    ) {
-      alert(
-        "Select a future date."
-      );
+    if (!obligationForm.dueDate) {
+      alert("Select a future date.");
       return;
     }
 
@@ -580,103 +454,48 @@ function Dashboard() {
     }
 
     try {
-
       setSaving(true);
 
       const payload = {
         amount,
-        type:
-          obligationForm.type,
+        type: obligationForm.type,
         description:
           obligationForm.description.trim(),
-        dueDate:
-          obligationForm.dueDate,
+        dueDate: obligationForm.dueDate,
       };
 
       if (editingObligationId) {
-
         await updateObligation(
           editingObligationId,
           payload
         );
-
       } else {
-
-        await createObligation(
-          payload
-        );
+        await createObligation(payload);
       }
 
       cancelObligationEdit();
 
       await loadDashboard();
-
     } catch (err) {
-
       console.error(err);
 
       alert(
         err?.response?.data?.message ||
-        err?.response?.data?.error ||
-        "Unable to save future cash flow."
+          err?.response?.data?.error ||
+          "Unable to save future cash flow."
       );
-
     } finally {
-
       setSaving(false);
     }
   }
 
-  async function handleObligationDelete(
-    id
-  ) {
+  async function handleObligationDone(obligation) {
+    const defaultDate = getTodayDate();
 
-    if (
-      !window.confirm(
-        "Delete this upcoming cash-flow item?"
-      )
-    ) {
-      return;
-    }
-
-    try {
-
-      setSaving(true);
-
-      await deleteObligation(id);
-
-      await loadDashboard();
-
-    } catch (err) {
-
-      console.error(err);
-
-      alert(
-        "Unable to delete upcoming item."
-      );
-
-    } finally {
-
-      setSaving(false);
-    }
-  }
-
-  async function handleObligationDone(
-    obligation
-  ) {
-
-    /*
-     * The user confirms the actual date.
-     * Default = today.
-     */
-    const defaultDate =
-      getTodayDate();
-
-    const actualDate =
-      window.prompt(
-        `Confirm the actual date for "${obligation.description}".\n\nEnter date as YYYY-MM-DD:`,
-        defaultDate
-      );
+    const actualDate = window.prompt(
+      `Confirm the actual date for "${obligation.description}".\n\nEnter date as YYYY-MM-DD:`,
+      defaultDate
+    );
 
     if (actualDate === null) {
       return;
@@ -708,14 +527,13 @@ function Dashboard() {
 
     if (
       !window.confirm(
-        `Mark "${obligation.description}" as completed on ${trimmedDate}?\n\nIt will move from Upcoming Events to Recorded Transactions.`
+        `Mark "${obligation.description}" as completed on ${trimmedDate}?\n\nIt will move to Recorded Transactions.`
       )
     ) {
       return;
     }
 
     try {
-
       setSaving(true);
 
       await markObligationAsDone(
@@ -724,25 +542,47 @@ function Dashboard() {
       );
 
       await loadDashboard();
-
     } catch (err) {
-
       console.error(err);
 
       alert(
         err?.response?.data?.message ||
-        err?.response?.data?.error ||
-        "Unable to mark cash flow as completed."
+          err?.response?.data?.error ||
+          "Unable to mark cash flow as completed."
       );
-
     } finally {
+      setSaving(false);
+    }
+  }
 
+  async function handleObligationDelete(id) {
+    if (
+      !window.confirm(
+        "Delete this upcoming cash-flow item?"
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      await deleteObligation(id);
+
+      await loadDashboard();
+    } catch (err) {
+      console.error(err);
+
+      alert(
+        err?.response?.data?.message ||
+          "Unable to delete upcoming item."
+      );
+    } finally {
       setSaving(false);
     }
   }
 
   async function handleDeleteAllObligations() {
-
     if (!obligations.length) {
       return;
     }
@@ -756,124 +596,107 @@ function Dashboard() {
     }
 
     try {
-
       setSaving(true);
 
       await deleteAllObligations();
 
       await loadDashboard();
-
     } catch (err) {
-
       console.error(err);
 
       alert(
-        "Unable to clear upcoming cash flows."
+        err?.response?.data?.message ||
+          "Unable to clear upcoming cash flows."
       );
-
     } finally {
-
       setSaving(false);
     }
   }
 
-  /* =====================================================
-     CHART DATA
-     ===================================================== */
+  /*
+   * =========================================================
+   * CHART DATA
+   * =========================================================
+   */
 
-  const projectionChartData =
-    useMemo(() => {
-
-      const currentPoint = {
+  const projectionChartData = useMemo(() => {
+    return [
+      {
         date: "Now",
-        balance:
-          Number(
-            summary.currentCash || 0
-          ),
-      };
+        balance: Number(
+          summary.currentCash || 0
+        ),
+      },
 
-      const futurePoints =
-        projection.map(
-          (item) => ({
-            date:
-              formatDate(item.date),
-            balance:
-              Number(
-                item.cashBalance || 0
-              ),
-          })
-        );
+      ...projection.map((item) => ({
+        date: formatDate(item.date),
+        balance: Number(
+          item.cashBalance || 0
+        ),
+      })),
+    ];
+  }, [
+    projection,
+    summary.currentCash,
+  ]);
 
-      return [
-        currentPoint,
-        ...futurePoints,
-      ];
+  const pieData = useMemo(() => {
+    return [
+      {
+        name: "Income",
+        value: Math.max(
+          Number(summary.totalIncome || 0),
+          0
+        ),
+      },
+      {
+        name: "Expenses",
+        value: Math.max(
+          Number(summary.totalExpenses || 0),
+          0
+        ),
+      },
+    ].filter(
+      (item) => item.value > 0
+    );
+  }, [
+    summary.totalIncome,
+    summary.totalExpenses,
+  ]);
 
-    }, [
-      projection,
-      summary.currentCash,
-    ]);
+  const pieTotal = useMemo(
+    () =>
+      pieData.reduce(
+        (sum, item) =>
+          sum + item.value,
+        0
+      ),
+    [pieData]
+  );
 
-  const pieData =
-    useMemo(() => {
-
-      const income =
-        Number(
-          summary.totalIncome || 0
-        );
-
-      const expenses =
-        Number(
-          summary.totalExpenses || 0
-        );
-
-      return [
-        {
-          name: "Income",
-          value: income,
-        },
-        {
-          name: "Expenses",
-          value: expenses,
-        },
-      ].filter(
-        (item) => item.value > 0
-      );
-
-    }, [
-      summary.totalIncome,
-      summary.totalExpenses,
-    ]);
-
-  /* =====================================================
-     HELPERS
-     ===================================================== */
+  /*
+   * =========================================================
+   * HELPERS
+   * =========================================================
+   */
 
   function formatCurrency(value) {
-
     return `₹${Number(
       value || 0
-    ).toLocaleString(
-      "en-IN",
-      {
-        maximumFractionDigits: 2,
-      }
-    )}`;
+    ).toLocaleString("en-IN", {
+      maximumFractionDigits: 2,
+    })}`;
   }
 
   function formatDate(value) {
-
     if (!value) {
       return "";
     }
 
-    const date =
-      new Date(value);
+    const date = new Date(value);
 
     if (
-      Number.isNaN(
-        date.getTime()
-      )
+      Number.isNaN(date.getTime())
     ) {
       return value;
     }
@@ -888,63 +711,36 @@ function Dashboard() {
     );
   }
 
-  function formatDateTime(value) {
-
-    if (!value) {
-      return "";
-    }
-
-    const date =
-      new Date(value);
-
-    if (
-      Number.isNaN(
-        date.getTime()
-      )
-    ) {
-      return value;
-    }
-
-    return date.toLocaleDateString(
-      "en-IN",
-      {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      }
-    );
-  }
-
-  function getRiskClass(
-    severity
-  ) {
-
+  function getRiskClass(severity) {
     switch (
       String(
         severity || ""
       ).toUpperCase()
     ) {
-
       case "CRITICAL":
         return "risk-critical";
 
+      case "HIGH":
       case "WARNING":
         return "risk-warning";
+
+      case "MEDIUM":
+        return "risk-medium";
 
       default:
         return "risk-low";
     }
   }
 
-  /* =====================================================
-     LOADING
-     ===================================================== */
+  /*
+   * =========================================================
+   * LOADING
+   * =========================================================
+   */
 
   if (loading) {
-
     return (
       <div className="dashboard-loading">
-
         <div className="loading-spinner">
           ↻
         </div>
@@ -954,12 +750,18 @@ function Dashboard() {
         </h2>
 
         <p>
-          Loading your actual financial data.
+          Analyzing your cash flow and
+          generating insights.
         </p>
-
       </div>
     );
   }
+
+  /*
+   * =========================================================
+   * DASHBOARD
+   * =========================================================
+   */
 
   return (
     <div className="dashboard">
@@ -975,7 +777,6 @@ function Dashboard() {
           </div>
 
           <div>
-
             <h1>
               CashPilot
             </h1>
@@ -983,39 +784,61 @@ function Dashboard() {
             <p>
               AI-powered cash flow intelligence
             </p>
-
           </div>
 
         </div>
 
-        <button
-          className="refresh-button"
-          onClick={loadDashboard}
-          disabled={saving}
-        >
-          ↻ Refresh
-        </button>
+        <div className="header-actions">
+
+          <button
+            className="refresh-button"
+            onClick={loadDashboard}
+            disabled={saving}
+            type="button"
+          >
+            ↻ Refresh
+          </button>
+
+          <button
+            className="logout-button"
+            onClick={handleLogout}
+            type="button"
+          >
+            ↪ Logout
+          </button>
+
+        </div>
 
       </header>
 
+      {/* ERROR */}
+
       {error && (
         <div className="error-banner">
-          {error}
+
+          <span>
+            {error}
+          </span>
+
+          <button
+            className="error-login-button"
+            onClick={handleLogout}
+            type="button"
+          >
+            Go to Login
+          </button>
+
         </div>
       )}
 
-      {/* =====================================================
-          ACCOUNT + ACTUAL TRANSACTION
-          ===================================================== */}
+      {/* STARTING CASH */}
 
-      <section className="management-grid">
+      <section className="starting-cash-card">
 
-        {/* STARTING CASH */}
-
-        <div className="management-card">
+        <div>
 
           <div className="section-eyebrow">
-            ACCOUNT SETUP
+            ACCOUNT BALANCE
           </div>
 
           <h2>
@@ -1023,68 +846,68 @@ function Dashboard() {
           </h2>
 
           <p>
-            Enter the cash available before
-            recorded transactions.
+            Opening balance used to calculate
+            your current cash position.
           </p>
-
-          <form
-            className="inline-form"
-            onSubmit={
-              handleStartingCashSubmit
-            }
-          >
-
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={
-                startingCashInput
-              }
-              onChange={(event) =>
-                setStartingCashInput(
-                  event.target.value
-                )
-              }
-              placeholder="Starting cash"
-            />
-
-            <button
-              type="submit"
-              disabled={saving}
-            >
-              Save
-            </button>
-
-          </form>
 
         </div>
 
-        {/* ACTUAL TRANSACTION */}
+        <div className="starting-cash-value">
+          {formatCurrency(
+            summary.startingCash
+          )}
+        </div>
 
-        <div className="management-card">
+      </section>
 
-          <div className="section-eyebrow">
-            ADD CASH FLOW
+      {/* ACTUAL CASH FLOW */}
+
+      <section
+        id="add-cash-flow-form"
+        className="full-management-card"
+      >
+
+        <div className="section-eyebrow">
+          ADD CASH FLOW
+        </div>
+
+        <div className="form-heading-row">
+
+          <div>
+
+            <h2>
+              {editingTransactionId
+                ? "Edit Cash Flow"
+                : "Record Income or Expense"}
+            </h2>
+
+            <p>
+              Record money that has already
+              entered or left the business.
+            </p>
+
           </div>
 
-          <h2>
-            {editingTransactionId
-              ? "Edit Transaction"
-              : "Record Income or Expense"}
-          </h2>
+          {editingTransactionId && (
+            <span className="editing-badge">
+              Editing transaction
+            </span>
+          )}
 
-          <p>
-            Only transactions that have already
-            happened can be recorded here.
-          </p>
+        </div>
 
-          <form
-            className="entry-form"
-            onSubmit={
-              handleTransactionSubmit
-            }
-          >
+        <form
+          className="full-entry-form"
+          onSubmit={
+            handleTransactionSubmit
+          }
+        >
+
+          <div className="form-field">
+
+            <label>
+              Type
+            </label>
 
             <select
               value={
@@ -1109,6 +932,14 @@ function Dashboard() {
 
             </select>
 
+          </div>
+
+          <div className="form-field">
+
+            <label>
+              Amount
+            </label>
+
             <input
               type="number"
               min="0.01"
@@ -1123,8 +954,16 @@ function Dashboard() {
                     event.target.value,
                 })
               }
-              placeholder="Amount"
+              placeholder="₹ Amount"
             />
+
+          </div>
+
+          <div className="form-field form-field-wide">
+
+            <label>
+              Description
+            </label>
 
             <input
               type="text"
@@ -1138,8 +977,16 @@ function Dashboard() {
                     event.target.value,
                 })
               }
-              placeholder="Description"
+              placeholder="e.g. Customer payment, fuel purchase"
             />
+
+          </div>
+
+          <div className="form-field">
+
+            <label>
+              Date & Time
+            </label>
 
             <input
               type="datetime-local"
@@ -1156,13 +1003,18 @@ function Dashboard() {
               }
             />
 
+          </div>
+
+          <div className="form-submit-area">
+
             <button
+              className="primary-button"
               type="submit"
               disabled={saving}
             >
               {editingTransactionId
-                ? "Update"
-                : "Add"}
+                ? "Update Cash Flow"
+                : "Add Cash Flow"}
             </button>
 
             {editingTransactionId && (
@@ -1178,15 +1030,13 @@ function Dashboard() {
               </button>
             )}
 
-          </form>
+          </div>
 
-        </div>
+        </form>
 
       </section>
 
-      {/* =====================================================
-          SUMMARY
-          ===================================================== */}
+      {/* SUMMARY */}
 
       <section className="summary-grid">
 
@@ -1213,6 +1063,7 @@ function Dashboard() {
             summary.totalIncome
           }
           subtitle="Recorded income"
+          positive
         />
 
         <SummaryCard
@@ -1221,6 +1072,7 @@ function Dashboard() {
             summary.totalExpenses
           }
           subtitle="Recorded expenses"
+          negative
         />
 
         <SummaryCard
@@ -1233,12 +1085,248 @@ function Dashboard() {
 
       </section>
 
-      {/* =====================================================
-          RISK
-          ===================================================== */}
+      {/* CHARTS */}
+
+      <section className="charts-grid">
+
+        {/* CASH FLOW PROJECTION */}
+
+        <div className="chart-card">
+
+          <div className="card-header">
+
+            <div>
+
+              <div className="section-eyebrow">
+                FORECAST
+              </div>
+
+              <h2>
+                Cash Flow Projection
+              </h2>
+
+              <p>
+                Current cash followed by
+                future income and expenses
+              </p>
+
+            </div>
+
+          </div>
+
+          <div className="chart-container">
+
+            {projectionChartData.length > 0 ? (
+
+              <ResponsiveContainer
+                width="100%"
+                height="100%"
+              >
+
+                <LineChart
+                  data={
+                    projectionChartData
+                  }
+                  margin={{
+                    top: 10,
+                    right: 20,
+                    left: 10,
+                    bottom: 10,
+                  }}
+                >
+
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="#e2e8f0"
+                  />
+
+                  <XAxis
+                    dataKey="date"
+                    tick={{
+                      fontSize: 12,
+                    }}
+                  />
+
+                  <YAxis
+                    tick={{
+                      fontSize: 12,
+                    }}
+                    tickFormatter={(value) =>
+                      `₹${(
+                        Number(value) / 1000
+                      ).toLocaleString(
+                        "en-IN"
+                      )}k`
+                    }
+                  />
+
+                  <Tooltip
+                    formatter={(value) =>
+                      formatCurrency(value)
+                    }
+                  />
+
+                  <Line
+                    type="monotone"
+                    dataKey="balance"
+                    name="Projected Balance"
+                    stroke={
+                      PRIMARY_COLOR
+                    }
+                    strokeWidth={4}
+                    dot={{
+                      r: 5,
+                      strokeWidth: 2,
+                      fill: "#ffffff",
+                    }}
+                    activeDot={{
+                      r: 7,
+                    }}
+                  />
+
+                </LineChart>
+
+              </ResponsiveContainer>
+
+            ) : (
+
+              <EmptyChart
+                text="No future cash-flow projection available."
+              />
+
+            )}
+
+          </div>
+
+        </div>
+
+        {/* PIE CHART */}
+
+        <div className="chart-card">
+
+          <div className="card-header">
+
+            <div>
+
+              <div className="section-eyebrow">
+                BREAKDOWN
+              </div>
+
+              <h2>
+                Income vs Expenses
+              </h2>
+
+              <p>
+                Actual recorded transactions
+              </p>
+
+            </div>
+
+          </div>
+
+          <div className="pie-container">
+
+            {pieData.length > 0 ? (
+
+              <>
+
+                <ResponsiveContainer
+                  width="100%"
+                  height="100%"
+                >
+
+                  <PieChart>
+
+                    <Pie
+                      data={pieData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="45%"
+                      outerRadius={115}
+                      innerRadius={68}
+                      paddingAngle={
+                        pieData.length > 1
+                          ? 5
+                          : 0
+                      }
+                      stroke="#ffffff"
+                      strokeWidth={3}
+                    >
+
+                      {pieData.map(
+                        (entry, index) => (
+                          <Cell
+                            key={`cell-${index}`}
+                            fill={
+                              entry.name ===
+                              "Income"
+                                ? INCOME_COLOR
+                                : EXPENSE_COLOR
+                            }
+                          />
+                        )
+                      )}
+
+                    </Pie>
+
+                    <Tooltip
+                      formatter={(value) =>
+                        formatCurrency(value)
+                      }
+                    />
+
+                    <Legend
+                      verticalAlign="bottom"
+                      height={36}
+                    />
+
+                  </PieChart>
+
+                </ResponsiveContainer>
+
+                <div className="pie-center">
+
+                  <span>
+                    Total
+                  </span>
+
+                  <strong>
+                    {formatCurrency(
+                      pieTotal
+                    )}
+                  </strong>
+
+                </div>
+
+              </>
+
+            ) : (
+
+              <div className="empty-chart">
+
+                <strong>
+                  No transactions yet
+                </strong>
+
+                <span>
+                  Add an income or expense
+                  above to populate this chart.
+                </span>
+
+              </div>
+
+            )}
+
+          </div>
+
+        </div>
+
+      </section>
+
+      {/* FINANCIAL HEALTH */}
 
       {risk && (
-
         <section className="risk-section">
 
           <div className="section-eyebrow">
@@ -1295,217 +1383,9 @@ function Dashboard() {
           </div>
 
         </section>
-
       )}
 
-      {/* =====================================================
-          CHARTS
-          ===================================================== */}
-
-      <section className="charts-grid">
-
-        {/* PROJECTION */}
-
-        <div className="chart-card large">
-
-          <div className="card-header">
-
-            <div>
-
-              <div className="section-eyebrow">
-                FORECAST
-              </div>
-
-              <h2>
-                Cash Flow Projection
-              </h2>
-
-              <p>
-                Current cash followed by
-                future obligations
-              </p>
-
-            </div>
-
-          </div>
-
-          <div className="chart-container">
-
-            {projectionChartData.length >
-            0 ? (
-
-              <ResponsiveContainer
-                width="100%"
-                height="100%"
-              >
-
-                <LineChart
-                  data={
-                    projectionChartData
-                  }
-                >
-
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                  />
-
-                  <XAxis
-                    dataKey="date"
-                  />
-
-                  <YAxis
-                    tickFormatter={
-                      (value) =>
-                        `₹${(
-                          Number(value) /
-                          1000
-                        ).toLocaleString(
-                          "en-IN"
-                        )}k`
-                    }
-                  />
-
-                  <Tooltip
-                    formatter={(value) =>
-                      formatCurrency(
-                        value
-                      )
-                    }
-                  />
-
-                  <Line
-                    type="monotone"
-                    dataKey="balance"
-                    name="Projected Balance"
-                    stroke="#2563eb"
-                    strokeWidth={3}
-                    dot={{ r: 5 }}
-                  />
-
-                </LineChart>
-
-              </ResponsiveContainer>
-
-            ) : (
-
-              <EmptyChart
-                text="No projection data"
-              />
-
-            )}
-
-          </div>
-
-        </div>
-
-        {/* PIE */}
-
-        <div className="chart-card">
-
-          <div className="card-header">
-
-            <div>
-
-              <div className="section-eyebrow">
-                BREAKDOWN
-              </div>
-
-              <h2>
-                Income vs Expenses
-              </h2>
-
-              <p>
-                Actual recorded transactions only
-              </p>
-
-            </div>
-
-          </div>
-
-          <div className="pie-container">
-
-            {pieData.length > 0 ? (
-
-              <ResponsiveContainer
-                width="100%"
-                height="100%"
-              >
-
-                <PieChart>
-
-                  <Pie
-                    data={pieData}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="45%"
-                    outerRadius={105}
-                    innerRadius={60}
-                    paddingAngle={
-                      pieData.length > 1
-                        ? 5
-                        : 0
-                    }
-                  >
-
-                    {pieData.map(
-                      (entry, index) => (
-
-                        <Cell
-                          key={`cell-${index}`}
-                          fill={
-                            entry.name ===
-                            "Income"
-                              ? "#16a34a"
-                              : "#dc2626"
-                          }
-                        />
-
-                      )
-                    )}
-
-                  </Pie>
-
-                  <Tooltip
-                    formatter={(value) =>
-                      formatCurrency(
-                        value
-                      )
-                    }
-                  />
-
-                  <Legend />
-
-                </PieChart>
-
-              </ResponsiveContainer>
-
-            ) : (
-
-              <div className="empty-chart">
-
-                <strong>
-                  No transactions yet
-                </strong>
-
-                <span>
-                  Add an income or expense
-                  above to populate this chart.
-                </span>
-
-              </div>
-
-            )}
-
-          </div>
-
-        </div>
-
-      </section>
-
-      {/* =====================================================
-          TRANSACTION HISTORY
-          ===================================================== */}
+      {/* RECORDED TRANSACTIONS */}
 
       <section className="section">
 
@@ -1532,8 +1412,7 @@ function Dashboard() {
 
         <div className="transaction-list">
 
-          {transactions.length ===
-          0 ? (
+          {transactions.length === 0 ? (
 
             <div className="empty-list">
               No transactions recorded yet.
@@ -1552,91 +1431,89 @@ function Dashboard() {
                     a.transactionDate
                   )
               )
-              .map(
-                (transaction) => {
+              .map((transaction) => {
 
-                  const income =
-                    transaction.type ===
-                    "INCOME";
+                const income =
+                  transaction.type ===
+                  "INCOME";
 
-                  return (
+                return (
+                  <div
+                    className="transaction-row"
+                    key={transaction.id}
+                  >
 
-                    <div
-                      className="transaction-row"
-                      key={
-                        transaction.id
-                      }
-                    >
+                    <div className="transaction-main">
 
-                      <div>
-
-                        <strong>
-                          {
-                            transaction.description
-                          }
-                        </strong>
-
-                        <span>
-                          {income
-                            ? "Income"
-                            : "Expense"}
-                          {" • "}
-                          {formatDate(
-                            transaction.transactionDate
-                          )}
-                        </span>
-
-                      </div>
-
-                      <strong
-                        className={
-                          income
-                            ? "amount-positive"
-                            : "amount-negative"
+                      <strong>
+                        {
+                          transaction.description
                         }
-                      >
-                        {income
-                          ? "+"
-                          : "-"}
-
-                        {formatCurrency(
-                          transaction.amount
-                        )}
                       </strong>
 
-                      <div className="row-actions">
+                      <span>
+                        {income
+                          ? "Income"
+                          : "Expense"}
 
-                        <button
-                          className="secondary-button"
-                          onClick={() =>
-                            startTransactionEdit(
-                              transaction
-                            )
-                          }
-                          disabled={saving}
-                        >
-                          Edit
-                        </button>
+                        {" • "}
 
-                        <button
-                          className="delete-button"
-                          onClick={() =>
-                            handleTransactionDelete(
-                              transaction.id
-                            )
-                          }
-                          disabled={saving}
-                        >
-                          Delete
-                        </button>
-
-                      </div>
+                        {formatDate(
+                          transaction.transactionDate
+                        )}
+                      </span>
 
                     </div>
 
-                  );
-                }
-              )
+                    <strong
+                      className={
+                        income
+                          ? "amount-positive"
+                          : "amount-negative"
+                      }
+                    >
+                      {income
+                        ? "+"
+                        : "-"}
+
+                      {formatCurrency(
+                        transaction.amount
+                      )}
+                    </strong>
+
+                    <div className="row-actions">
+
+                      <button
+                        className="secondary-button small"
+                        onClick={() =>
+                          startTransactionEdit(
+                            transaction
+                          )
+                        }
+                        disabled={saving}
+                        type="button"
+                      >
+                        Edit
+                      </button>
+
+                      <button
+                        className="delete-button small"
+                        onClick={() =>
+                          handleTransactionDelete(
+                            transaction.id
+                          )
+                        }
+                        disabled={saving}
+                        type="button"
+                      >
+                        Delete
+                      </button>
+
+                    </div>
+
+                  </div>
+                );
+              })
 
           )}
 
@@ -1644,9 +1521,7 @@ function Dashboard() {
 
       </section>
 
-      {/* =====================================================
-          UPCOMING EVENTS
-          ===================================================== */}
+      {/* FUTURE CASH FLOWS */}
 
       <section className="section">
 
@@ -1669,140 +1544,193 @@ function Dashboard() {
 
           </div>
 
-          {obligations.length >
-            0 && (
-
+          {obligations.length > 0 && (
             <button
               className="danger-outline"
               onClick={
                 handleDeleteAllObligations
               }
               disabled={saving}
+              type="button"
             >
               Clear All
             </button>
-
           )}
 
         </div>
 
-        {/* ADD / EDIT FUTURE CASH FLOW */}
+        {/* FUTURE ENTRY TILE */}
 
         <div
           id="future-cash-flow-form"
-          className="management-card timeline-form-card"
+          className="full-management-card future-form-card"
         >
 
-          <h3>
-            {editingObligationId
-              ? "Edit Future Cash Flow"
-              : "Add future cash flow"}
-          </h3>
+          <div className="section-eyebrow">
+            FUTURE CASH FLOW
+          </div>
 
-          <p>
-            Only dates after today are allowed here.
-          </p>
+          <div className="form-heading-row">
+
+            <div>
+
+              <h2>
+                {editingObligationId
+                  ? "Edit Future Cash Flow"
+                  : "Add Future Cash Flow"}
+              </h2>
+
+              <p>
+                Add expected income or expenses
+                so CashPilot can project your
+                future cash position.
+              </p>
+
+            </div>
+
+            {editingObligationId && (
+              <span className="editing-badge">
+                Editing future cash flow
+              </span>
+            )}
+
+          </div>
 
           <form
-            className="entry-form"
+            className="full-entry-form"
             onSubmit={
               handleObligationSubmit
             }
           >
 
-            <select
-              value={
-                obligationForm.type
-              }
-              onChange={(event) =>
-                setObligationForm({
-                  ...obligationForm,
-                  type:
-                    event.target.value,
-                })
-              }
-            >
+            <div className="form-field">
 
-              <option value="EXPENSE">
-                Future Expense
-              </option>
+              <label>
+                Type
+              </label>
 
-              <option value="INCOME">
-                Future Income
-              </option>
+              <select
+                value={
+                  obligationForm.type
+                }
+                onChange={(event) =>
+                  setObligationForm({
+                    ...obligationForm,
+                    type:
+                      event.target.value,
+                  })
+                }
+              >
 
-            </select>
+                <option value="EXPENSE">
+                  Future Expense
+                </option>
 
-            <input
-              type="number"
-              min="0.01"
-              step="0.01"
-              value={
-                obligationForm.amount
-              }
-              onChange={(event) =>
-                setObligationForm({
-                  ...obligationForm,
-                  amount:
-                    event.target.value,
-                })
-              }
-              placeholder="Amount"
-            />
+                <option value="INCOME">
+                  Future Income
+                </option>
 
-            <input
-              type="text"
-              value={
-                obligationForm.description
-              }
-              onChange={(event) =>
-                setObligationForm({
-                  ...obligationForm,
-                  description:
-                    event.target.value,
-                })
-              }
-              placeholder="Description"
-            />
+              </select>
 
-            <input
-              type="date"
-              min={getTomorrowDate()}
-              value={
-                obligationForm.dueDate
-              }
-              onChange={(event) =>
-                setObligationForm({
-                  ...obligationForm,
-                  dueDate:
-                    event.target.value,
-                })
-              }
-            />
+            </div>
 
-            <button
-              type="submit"
-              disabled={saving}
-            >
-              {editingObligationId
-                ? "Update"
-                : "Add"}
-            </button>
+            <div className="form-field">
 
-            {editingObligationId && (
+              <label>
+                Amount
+              </label>
+
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={
+                  obligationForm.amount
+                }
+                onChange={(event) =>
+                  setObligationForm({
+                    ...obligationForm,
+                    amount:
+                      event.target.value,
+                  })
+                }
+                placeholder="₹ Amount"
+              />
+
+            </div>
+
+            <div className="form-field form-field-wide">
+
+              <label>
+                Description
+              </label>
+
+              <input
+                type="text"
+                value={
+                  obligationForm.description
+                }
+                onChange={(event) =>
+                  setObligationForm({
+                    ...obligationForm,
+                    description:
+                      event.target.value,
+                  })
+                }
+                placeholder="e.g. AWS bill, customer payment"
+              />
+
+            </div>
+
+            <div className="form-field">
+
+              <label>
+                Due Date
+              </label>
+
+              <input
+                type="date"
+                min={getTomorrowDate()}
+                value={
+                  obligationForm.dueDate
+                }
+                onChange={(event) =>
+                  setObligationForm({
+                    ...obligationForm,
+                    dueDate:
+                      event.target.value,
+                  })
+                }
+              />
+
+            </div>
+
+            <div className="form-submit-area">
 
               <button
-                type="button"
-                className="secondary-button"
-                onClick={
-                  cancelObligationEdit
-                }
+                className="primary-button"
+                type="submit"
                 disabled={saving}
               >
-                Cancel
+                {editingObligationId
+                  ? "Update Future Flow"
+                  : "Add Future Flow"}
               </button>
 
-            )}
+              {editingObligationId && (
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={
+                    cancelObligationEdit
+                  }
+                  disabled={saving}
+                >
+                  Cancel
+                </button>
+              )}
+
+            </div>
 
           </form>
 
@@ -1812,8 +1740,7 @@ function Dashboard() {
 
         <div className="timeline-card">
 
-          {projection.length ===
-          0 ? (
+          {obligations.length === 0 ? (
 
             <div className="empty-list">
               No upcoming cash flows.
@@ -1821,37 +1748,45 @@ function Dashboard() {
 
           ) : (
 
-            projection.map(
-              (item, index) => {
+            obligations
+              .slice()
+              .sort(
+                (a, b) =>
+                  new Date(a.dueDate) -
+                  new Date(b.dueDate)
+              )
+              .map((obligation) => {
 
                 const positive =
-                  Number(
-                    item.change
-                  ) >= 0;
+                  obligation.type ===
+                  "INCOME";
 
-                const obligation =
-                  obligations.find(
-                    (o) =>
-                      o.description ===
-                        item.description &&
+                const projectionItem =
+                  projection.find(
+                    (item) =>
                       String(
-                        o.dueDate
+                        item.date
                       ) ===
                         String(
-                          item.date
-                        )
+                          obligation.dueDate
+                        ) &&
+                      item.description ===
+                        obligation.description
                   );
 
-                return (
+                const projectedBalance =
+                  projectionItem
+                    ?.cashBalance;
 
+                return (
                   <div
                     className="timeline-item"
-                    key={`${item.date}-${index}`}
+                    key={obligation.id}
                   >
 
                     <div className="timeline-date">
                       {formatDate(
-                        item.date
+                        obligation.dueDate
                       )}
                     </div>
 
@@ -1865,19 +1800,19 @@ function Dashboard() {
 
                     <div className="timeline-content">
 
-                      <div>
+                      <div className="timeline-info">
+
+                        <div className="timeline-type">
+                          {positive
+                            ? "UPCOMING INCOME"
+                            : "UPCOMING EXPENSE"}
+                        </div>
 
                         <h3>
                           {
-                            item.description
+                            obligation.description
                           }
                         </h3>
-
-                        <p>
-                          {positive
-                            ? "Upcoming income"
-                            : "Upcoming expense"}
-                        </p>
 
                       </div>
 
@@ -1892,73 +1827,73 @@ function Dashboard() {
                         >
                           {positive
                             ? "+"
-                            : ""}
+                            : "-"}
 
                           {formatCurrency(
-                            item.change
+                            obligation.amount
                           )}
                         </strong>
 
-                        <span>
-                          Projected balance:{" "}
-                          {formatCurrency(
-                            item.cashBalance
-                          )}
-                        </span>
-
-                        {obligation && (
-
-                          <div className="row-actions">
-
-                            <button
-                              className="secondary-button"
-                              onClick={() =>
-                                startObligationEdit(
-                                  obligation
-                                )
-                              }
-                              disabled={saving}
-                            >
-                              Edit
-                            </button>
-
-                            <button
-                              className="complete-button"
-                              onClick={() =>
-                                handleObligationDone(
-                                  obligation
-                                )
-                              }
-                              disabled={saving}
-                            >
-                              Mark as Done
-                            </button>
-
-                            <button
-                              className="delete-button"
-                              onClick={() =>
-                                handleObligationDelete(
-                                  obligation.id
-                                )
-                              }
-                              disabled={saving}
-                            >
-                              Delete
-                            </button>
-
-                          </div>
-
+                        {projectedBalance !==
+                          undefined && (
+                          <span>
+                            Projected balance:{" "}
+                            {formatCurrency(
+                              projectedBalance
+                            )}
+                          </span>
                         )}
+
+                        <div className="row-actions">
+
+                          <button
+                            className="secondary-button small"
+                            onClick={() =>
+                              startObligationEdit(
+                                obligation
+                              )
+                            }
+                            disabled={saving}
+                            type="button"
+                          >
+                            Edit
+                          </button>
+
+                          <button
+                            className="complete-button"
+                            onClick={() =>
+                              handleObligationDone(
+                                obligation
+                              )
+                            }
+                            disabled={saving}
+                            type="button"
+                          >
+                            ✓ Mark as Done
+                          </button>
+
+                          <button
+                            className="delete-button small"
+                            onClick={() =>
+                              handleObligationDelete(
+                                obligation.id
+                              )
+                            }
+                            disabled={saving}
+                            type="button"
+                          >
+                            Delete
+                          </button>
+
+                        </div>
 
                       </div>
 
                     </div>
 
                   </div>
-
                 );
-              }
-            )
+              })
 
           )}
 
@@ -1967,176 +1902,152 @@ function Dashboard() {
       </section>
 
       {/* =====================================================
-          RECOMMENDATIONS
-          ===================================================== */}
-
-      {recommendations.length >
-        0 && (
-
-        <section className="section">
-
-          <div className="section-heading">
-
-            <div>
-
-              <div className="section-eyebrow">
-                ACTION PLAN
-              </div>
-
-              <h2>
-                Recommended Actions
-              </h2>
-
-              <p>
-                Based on your projected cash position
-              </p>
-
-            </div>
-
-          </div>
-
-          <div className="recommendations-grid">
-
-            {recommendations.map(
-              (item, index) => (
-
-                <div
-                  className="recommendation-card"
-                  key={index}
-                >
-
-                  <div className="recommendation-top">
-
-                    <span
-                      className={`priority ${String(
-                        item.priority || ""
-                      ).toLowerCase()}`}
-                    >
-                      {item.priority}
-                    </span>
-
-                    <span>
-                      {String(
-                        index + 1
-                      ).padStart(
-                        2,
-                        "0"
-                      )}
-                    </span>
-
-                  </div>
-
-                  <h3>
-                    {item.title}
-                  </h3>
-
-                  <div>
-
-                    <span className="label">
-                      Why
-                    </span>
-
-                    <p>
-                      {item.reason}
-                    </p>
-
-                  </div>
-
-                  <div>
-
-                    <span className="label">
-                      Action
-                    </span>
-
-                    <p>
-                      {item.action}
-                    </p>
-
-                  </div>
-
-                </div>
-
-              )
-            )}
-
-          </div>
-
-        </section>
-
-      )}
-
-      {/* =====================================================
-          AI
+          AI FINANCIAL INTELLIGENCE
+          NO RECOMMENDED ACTIONS
           ===================================================== */}
 
       {aiData && (
-
         <section className="ai-section">
 
           <div className="ai-header">
 
-            <div className="ai-logo">
-              ✦
-            </div>
+            <div className="ai-title-area">
 
-            <div>
-
-              <div className="section-eyebrow">
-                POWERED BY CASHPILOT AI
+              <div className="ai-logo">
+                ✦
               </div>
 
-              <h2>
-                AI Cash Flow Analysis
-              </h2>
+              <div>
 
-              <p>
-                Intelligent analysis of your
-                financial position
-              </p>
+                <div className="ai-eyebrow">
+                  POWERED BY CASHPILOT AI
+                </div>
+
+                <h2>
+                  AI Financial Intelligence
+                </h2>
+
+                <p>
+                  Your business cash flow,
+                  interpreted by AI
+                </p>
+
+              </div>
 
             </div>
 
+            <span className="ai-badge">
+              AI INSIGHT
+            </span>
+
           </div>
+
+          {/* LARGE EXECUTIVE SUMMARY */}
+
+          <div className="ai-summary-main">
+
+            <div className="ai-summary-label">
+              EXECUTIVE SUMMARY
+            </div>
+
+            <h3>
+              What's happening?
+            </h3>
+
+            <p>
+              {aiData.summary ||
+                "No AI summary is available yet."}
+            </p>
+
+          </div>
+
+          {/* AI DETAIL GRID */}
 
           <div className="ai-grid">
 
             <AIBox
-              label="SUMMARY"
-              title="What's happening?"
-              text={
-                aiData.summary
-              }
-            />
-
-            <AIBox
-              label="RISK EXPLANATION"
-              title="Why is this happening?"
+              label="CASH FLOW RISK"
+              title="Where are you exposed?"
               text={
                 aiData.riskExplanation
               }
+              icon="!"
             />
 
             <AIBox
-              label="PRIORITY ACTION"
-              title="What should you do first?"
+              label="PRIORITY"
+              title="What matters most?"
               text={
                 aiData.priorityAction
               }
+              icon="→"
+              priority
             />
 
             <AIBox
-              label="OUTLOOK"
+              label="FORWARD OUTLOOK"
               title="What happens next?"
               text={
                 aiData.outlook
               }
+              icon="↗"
             />
 
           </div>
 
-        </section>
+          {/* AI DATA CONTEXT */}
 
+          <div className="ai-context">
+
+            <div>
+              <span>
+                Current cash
+              </span>
+
+              <strong>
+                {formatCurrency(
+                  summary.currentCash
+                )}
+              </strong>
+            </div>
+
+            <div>
+              <span>
+                Future cash flows
+              </span>
+
+              <strong>
+                {obligations.length}
+              </strong>
+            </div>
+
+            <div>
+              <span>
+                Projected events
+              </span>
+
+              <strong>
+                {projection.length}
+              </strong>
+            </div>
+
+            <div>
+              <span>
+                Cash-flow risk
+              </span>
+
+              <strong>
+                {risk?.severity ||
+                  "LOW"}
+              </strong>
+            </div>
+
+          </div>
+
+        </section>
       )}
+
+      {/* FOOTER */}
 
       <footer className="dashboard-footer">
 
@@ -2154,23 +2065,35 @@ function Dashboard() {
   );
 }
 
-/* =========================================================
-   COMPONENTS
-   ========================================================= */
+/*
+ * =========================================================
+ * SUMMARY CARD
+ * =========================================================
+ */
 
 function SummaryCard({
   title,
   value,
   subtitle,
   primary = false,
+  positive = false,
+  negative = false,
 }) {
+  let modifier = "";
+
+  if (positive) {
+    modifier = "positive";
+  }
+
+  if (negative) {
+    modifier = "negative";
+  }
 
   return (
-
     <div
       className={`summary-card ${
         primary ? "primary" : ""
-      }`}
+      } ${modifier}`}
     >
 
       <span className="summary-label">
@@ -2178,14 +2101,12 @@ function SummaryCard({
       </span>
 
       <strong className="summary-value">
-        {`₹${Number(
+        ₹
+        {Number(
           value || 0
-        ).toLocaleString(
-          "en-IN",
-          {
-            maximumFractionDigits: 2,
-          }
-        )}`}
+        ).toLocaleString("en-IN", {
+          maximumFractionDigits: 2,
+        })}
       </strong>
 
       <span className="summary-subtitle">
@@ -2196,10 +2117,13 @@ function SummaryCard({
   );
 }
 
-function EmptyChart({
-  text,
-}) {
+/*
+ * =========================================================
+ * EMPTY CHART
+ * =========================================================
+ */
 
+function EmptyChart({ text }) {
   return (
     <div className="empty-chart">
       {text}
@@ -2207,23 +2131,35 @@ function EmptyChart({
   );
 }
 
+/*
+ * =========================================================
+ * AI BOX
+ * =========================================================
+ */
+
 function AIBox({
   label,
   title,
   text,
+  icon,
+  priority = false,
 }) {
-
   return (
-
-    <div className="ai-card">
+    <div
+      className={`ai-card ${
+        priority
+          ? "ai-card-priority"
+          : ""
+      }`}
+    >
 
       <div className="ai-card-icon">
-        ✦
+        {icon}
       </div>
 
       <div>
 
-        <span>
+        <span className="ai-card-label">
           {label}
         </span>
 
@@ -2242,23 +2178,22 @@ function AIBox({
   );
 }
 
-/* =========================================================
-   DATE HELPERS
-   ========================================================= */
+/*
+ * =========================================================
+ * DATE HELPERS
+ * =========================================================
+ */
 
 function getLocalDateTime() {
-
-  const now =
-    new Date();
+  const now = new Date();
 
   const offset =
     now.getTimezoneOffset();
 
-  const local =
-    new Date(
-      now.getTime() -
-        offset * 60 * 1000
-    );
+  const local = new Date(
+    now.getTime() -
+      offset * 60 * 1000
+  );
 
   return local
     .toISOString()
@@ -2266,18 +2201,15 @@ function getLocalDateTime() {
 }
 
 function getTodayDate() {
-
-  const now =
-    new Date();
+  const now = new Date();
 
   const offset =
     now.getTimezoneOffset();
 
-  const local =
-    new Date(
-      now.getTime() -
-        offset * 60 * 1000
-    );
+  const local = new Date(
+    now.getTime() -
+      offset * 60 * 1000
+  );
 
   return local
     .toISOString()
@@ -2285,9 +2217,7 @@ function getTodayDate() {
 }
 
 function getTomorrowDate() {
-
-  const now =
-    new Date();
+  const now = new Date();
 
   now.setDate(
     now.getDate() + 1
@@ -2296,32 +2226,25 @@ function getTomorrowDate() {
   const offset =
     now.getTimezoneOffset();
 
-  const local =
-    new Date(
-      now.getTime() -
-        offset * 60 * 1000
-    );
+  const local = new Date(
+    now.getTime() -
+      offset * 60 * 1000
+  );
 
   return local
     .toISOString()
     .slice(0, 10);
 }
 
-function toLocalDateTimeInput(
-  value
-) {
-
+function toLocalDateTimeInput(value) {
   if (!value) {
     return getLocalDateTime();
   }
 
-  const date =
-    new Date(value);
+  const date = new Date(value);
 
   if (
-    Number.isNaN(
-      date.getTime()
-    )
+    Number.isNaN(date.getTime())
   ) {
     return getLocalDateTime();
   }
@@ -2329,11 +2252,10 @@ function toLocalDateTimeInput(
   const offset =
     date.getTimezoneOffset();
 
-  const local =
-    new Date(
-      date.getTime() -
-        offset * 60 * 1000
-    );
+  const local = new Date(
+    date.getTime() -
+      offset * 60 * 1000
+  );
 
   return local
     .toISOString()

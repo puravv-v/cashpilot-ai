@@ -1,7 +1,9 @@
 package com.cashpilot.backend.service;
 
 import com.cashpilot.backend.entity.CashSettings;
+import com.cashpilot.backend.entity.User;
 import com.cashpilot.backend.repository.CashSettingsRepository;
+
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -9,49 +11,43 @@ import java.math.BigDecimal;
 @Service
 public class CashSettingsService {
 
-    private static final Long SETTINGS_ID = 1L;
-
     private final CashSettingsRepository repository;
+    private final AuthenticatedUserService authenticatedUserService;
 
-    public CashSettingsService(CashSettingsRepository repository) {
+    public CashSettingsService(
+            CashSettingsRepository repository,
+            AuthenticatedUserService authenticatedUserService) {
+
         this.repository = repository;
+        this.authenticatedUserService =
+                authenticatedUserService;
     }
 
     public CashSettings getSettings() {
 
-        return repository.findById(SETTINGS_ID)
-                .orElseGet(() ->
-                        repository.save(
-                                new CashSettings(
-                                        SETTINGS_ID,
-                                        BigDecimal.ZERO
-                                )
-                        )
-                );
+        User currentUser =
+                authenticatedUserService.getCurrentUser();
+
+        return repository.findByUser(currentUser)
+                .orElseGet(() -> {
+
+                    /*
+                     * This is only a fallback for older users
+                     * who were created before starting cash was
+                     * added to registration.
+                     */
+                    CashSettings settings =
+                            new CashSettings(
+                                    BigDecimal.ZERO,
+                                    currentUser
+                            );
+
+                    return repository.save(settings);
+                });
     }
 
     public BigDecimal getStartingCash() {
+
         return getSettings().getStartingCash();
-    }
-
-    public CashSettings updateStartingCash(BigDecimal amount) {
-
-        if (amount == null) {
-            throw new IllegalArgumentException(
-                    "Starting cash cannot be null."
-            );
-        }
-
-        if (amount.compareTo(BigDecimal.ZERO) < 0) {
-            throw new IllegalArgumentException(
-                    "Starting cash cannot be negative."
-            );
-        }
-
-        CashSettings settings = getSettings();
-
-        settings.setStartingCash(amount);
-
-        return repository.save(settings);
     }
 }

@@ -7,7 +7,9 @@ import com.cashpilot.backend.entity.CashObligation;
 import com.cashpilot.backend.entity.CashObligationType;
 import com.cashpilot.backend.entity.Transaction;
 import com.cashpilot.backend.entity.TransactionType;
+import com.cashpilot.backend.entity.User;
 import com.cashpilot.backend.repository.CashObligationRepository;
+
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -22,13 +24,25 @@ public class CashObligationService {
 
     private final CashObligationRepository repository;
     private final TransactionService transactionService;
+    private final AuthenticatedUserService authenticatedUserService;
 
     public CashObligationService(
             CashObligationRepository repository,
-            TransactionService transactionService) {
+            TransactionService transactionService,
+            AuthenticatedUserService authenticatedUserService) {
 
         this.repository = repository;
         this.transactionService = transactionService;
+        this.authenticatedUserService =
+                authenticatedUserService;
+    }
+
+    // =====================================================
+    // CURRENT USER
+    // =====================================================
+
+    private User getCurrentUser() {
+        return authenticatedUserService.getCurrentUser();
     }
 
     // =====================================================
@@ -38,7 +52,11 @@ public class CashObligationService {
     public CashObligation createObligation(
             CashObligation obligation) {
 
-        validateFutureDate(obligation.getDueDate());
+        validateFutureDate(
+                obligation.getDueDate()
+        );
+
+        obligation.setUser(getCurrentUser());
 
         return repository.save(obligation);
     }
@@ -51,20 +69,35 @@ public class CashObligationService {
             Long id,
             CashObligation updated) {
 
-        validateFutureDate(updated.getDueDate());
+        validateFutureDate(
+                updated.getDueDate()
+        );
 
         CashObligation existing =
-                repository.findById(id)
-                        .orElseThrow(() ->
-                                new IllegalArgumentException(
-                                        "Upcoming cash-flow item not found."
-                                )
-                        );
+                repository.findByIdAndUser(
+                        id,
+                        getCurrentUser()
+                ).orElseThrow(() ->
+                        new IllegalArgumentException(
+                                "Upcoming cash-flow item not found."
+                        )
+                );
 
-        existing.setAmount(updated.getAmount());
-        existing.setType(updated.getType());
-        existing.setDescription(updated.getDescription());
-        existing.setDueDate(updated.getDueDate());
+        existing.setAmount(
+                updated.getAmount()
+        );
+
+        existing.setType(
+                updated.getType()
+        );
+
+        existing.setDescription(
+                updated.getDescription()
+        );
+
+        existing.setDueDate(
+                updated.getDueDate()
+        );
 
         return repository.save(existing);
     }
@@ -90,23 +123,21 @@ public class CashObligationService {
         }
 
         CashObligation obligation =
-                repository.findById(id)
-                        .orElseThrow(() ->
-                                new IllegalArgumentException(
-                                        "Upcoming cash-flow item not found."
-                                )
-                        );
+                repository.findByIdAndUser(
+                        id,
+                        getCurrentUser()
+                ).orElseThrow(() ->
+                        new IllegalArgumentException(
+                                "Upcoming cash-flow item not found."
+                        )
+                );
 
         TransactionType transactionType =
-                obligation.getType() == CashObligationType.INCOME
+                obligation.getType()
+                        == CashObligationType.INCOME
                         ? TransactionType.INCOME
                         : TransactionType.EXPENSE;
 
-        /*
-         * Convert the future item into an actual transaction.
-         *
-         * We use the confirmed actual date at the start of that day.
-         */
         Transaction transaction =
                 new Transaction(
                         obligation.getAmount(),
@@ -115,14 +146,16 @@ public class CashObligationService {
                         actualDate.atStartOfDay()
                 );
 
-        Transaction savedTransaction =
-                transactionService.createTransaction(transaction);
-
         /*
-         * Delete the future obligation only after the actual
-         * transaction has been successfully created.
+         * TransactionService automatically attaches
+         * the authenticated user.
          */
-        repository.deleteById(id);
+        Transaction savedTransaction =
+                transactionService.createTransaction(
+                        transaction
+                );
+
+        repository.delete(obligation);
 
         return savedTransaction;
     }
@@ -131,7 +164,8 @@ public class CashObligationService {
     // VALIDATION
     // =====================================================
 
-    private void validateFutureDate(LocalDate dueDate) {
+    private void validateFutureDate(
+            LocalDate dueDate) {
 
         if (dueDate == null) {
             throw new IllegalArgumentException(
@@ -139,9 +173,6 @@ public class CashObligationService {
             );
         }
 
-        /*
-         * Future cash flows must be strictly after today.
-         */
         if (!dueDate.isAfter(LocalDate.now())) {
             throw new IllegalArgumentException(
                     "Future cash flows must have a future date."
@@ -154,7 +185,10 @@ public class CashObligationService {
     // =====================================================
 
     public List<CashObligation> getAllObligations() {
-        return repository.findAll();
+
+        return repository.findByUser(
+                getCurrentUser()
+        );
     }
 
     // =====================================================
@@ -164,7 +198,8 @@ public class CashObligationService {
     public List<CashObligation> getUpcomingObligations() {
 
         return repository
-                .findByDueDateGreaterThanEqualOrderByDueDateAsc(
+                .findByUserAndDueDateGreaterThanEqualOrderByDueDateAsc(
+                        getCurrentUser(),
                         LocalDate.now().plusDays(1)
                 );
     }
@@ -174,7 +209,18 @@ public class CashObligationService {
     // =====================================================
 
     public void deleteObligation(Long id) {
-        repository.deleteById(id);
+
+        CashObligation obligation =
+                repository.findByIdAndUser(
+                        id,
+                        getCurrentUser()
+                ).orElseThrow(() ->
+                        new IllegalArgumentException(
+                                "Upcoming cash-flow item not found."
+                        )
+                );
+
+        repository.delete(obligation);
     }
 
     // =====================================================
@@ -182,7 +228,13 @@ public class CashObligationService {
     // =====================================================
 
     public void deleteAllObligations() {
-        repository.deleteAll();
+
+        List<CashObligation> obligations =
+                repository.findByUser(
+                        getCurrentUser()
+                );
+
+        repository.deleteAll(obligations);
     }
 
     // =====================================================
@@ -193,9 +245,11 @@ public class CashObligationService {
             BigDecimal currentCash) {
 
         List<CashObligation> obligations =
-                repository.findByDueDateGreaterThanEqualOrderByDueDateAsc(
-                        LocalDate.now().plusDays(1)
-                );
+                repository
+                        .findByUserAndDueDateGreaterThanEqualOrderByDueDateAsc(
+                                getCurrentUser(),
+                                LocalDate.now().plusDays(1)
+                        );
 
         obligations.sort(
                 Comparator.comparing(
@@ -260,7 +314,8 @@ public class CashObligationService {
         CashFlowProjection lowestPoint =
                 projections.get(0);
 
-        for (CashFlowProjection projection : projections) {
+        for (CashFlowProjection projection :
+                projections) {
 
             if (projection.getCashBalance()
                     .compareTo(
@@ -283,12 +338,14 @@ public class CashObligationService {
         String severity;
 
         if (balance.compareTo(
-                criticalThreshold) <= 0) {
+                criticalThreshold
+        ) <= 0) {
 
             severity = "CRITICAL";
 
         } else if (balance.compareTo(
-                warningThreshold) <= 0) {
+                warningThreshold
+        ) <= 0) {
 
             severity = "WARNING";
 
@@ -346,7 +403,8 @@ public class CashObligationService {
 
         List<CashObligation> obligations =
                 repository
-                        .findByDueDateGreaterThanEqualOrderByDueDateAsc(
+                        .findByUserAndDueDateGreaterThanEqualOrderByDueDateAsc(
+                                getCurrentUser(),
                                 LocalDate.now().plusDays(1)
                         );
 
@@ -355,7 +413,8 @@ public class CashObligationService {
 
         CashObligation largestExpense = null;
 
-        for (CashObligation obligation : obligations) {
+        for (CashObligation obligation :
+                obligations) {
 
             if (obligation.getType()
                     == CashObligationType.EXPENSE) {
@@ -401,7 +460,8 @@ public class CashObligationService {
 
             CashObligation bestIncomingPayment = null;
 
-            for (CashObligation obligation : obligations) {
+            for (CashObligation obligation :
+                    obligations) {
 
                 if (obligation.getType()
                         == CashObligationType.INCOME
@@ -410,12 +470,6 @@ public class CashObligationService {
                                 largestExpense.getDueDate()
                         )) {
 
-                    /*
-                     * Prefer the latest incoming payment before
-                     * the expense. This gives a more useful
-                     * recommendation than simply taking the
-                     * first income in the list.
-                     */
                     if (bestIncomingPayment == null ||
                             obligation.getDueDate()
                                     .isAfter(
@@ -423,7 +477,8 @@ public class CashObligationService {
                                                     .getDueDate()
                                     )) {
 
-                        bestIncomingPayment = obligation;
+                        bestIncomingPayment =
+                                obligation;
                     }
                 }
             }
@@ -481,7 +536,8 @@ public class CashObligationService {
         // AWS / INFRASTRUCTURE
         // =================================================
 
-        for (CashObligation obligation : obligations) {
+        for (CashObligation obligation :
+                obligations) {
 
             if (obligation.getType()
                     == CashObligationType.EXPENSE

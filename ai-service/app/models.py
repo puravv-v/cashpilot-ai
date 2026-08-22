@@ -1,27 +1,20 @@
 from pydantic import BaseModel
-from typing import List
+from typing import Optional
 
 
 class Risk(BaseModel):
     riskDetected: bool
     severity: str
-    riskDate: str | None = None
-    projectedBalance: float | None = None
+    riskDate: Optional[str] = None
+    projectedBalance: Optional[float] = None
     message: str
-    primaryCause: str | None = None
-
-
-class Recommendation(BaseModel):
-    priority: str
-    title: str
-    reason: str
-    action: str
+    primaryCause: Optional[str] = None
 
 
 class AIAnalysisRequest(BaseModel):
     currentCash: float
     risk: Risk
-    recommendations: List[Recommendation]
+    recommendations: list = []
 
 
 class AIAnalysisResponse(BaseModel):

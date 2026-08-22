@@ -13,36 +13,120 @@ client = Groq(
 
 def analyze_finances(data):
 
+    financial_data = data.model_dump()
+
     prompt = f"""
-You are CashPilot AI, a financial cash-flow analysis assistant.
+You are CashPilot AI, an intelligent business
+cash-flow analysis assistant.
 
-Analyze the following business cash-flow information.
+Analyze the following REAL business cash-flow data.
 
-Financial data:
-{json.dumps(data, indent=2, default=str)}
+FINANCIAL DATA:
+{json.dumps(
+    financial_data,
+    indent=2,
+    default=str
+)}
 
 Return ONLY valid JSON.
 
-The JSON must contain exactly these four fields:
+Return exactly these six fields:
 
 {{
   "summary": "...",
   "riskExplanation": "...",
+  "businessPattern": "...",
   "priorityAction": "...",
-  "outlook": "..."
+  "outlook": "...",
+  "scenarioAnalysis": "..."
 }}
 
-Rules:
+Your six sections must mean:
 
-1. Be concise and practical.
-2. Use the exact financial numbers provided.
-3. Do not invent transactions or amounts.
-4. Identify the most important cash-flow risk.
-5. Identify the most important action the business should take.
-6. Mention important dates when relevant.
-7. Use Indian Rupee notation such as ₹ when discussing amounts.
-8. Do not use markdown.
-9. Return JSON only.
+1. summary
+
+This is the executive summary.
+
+Explain the overall financial position,
+current cash, major movements, and the most
+important thing happening right now.
+
+This should be the most useful high-level
+interpretation of the business.
+
+2. riskExplanation
+
+Explain the biggest cash-flow exposure.
+
+Mention the exact relevant amount and date
+when available.
+
+Explain why the business is exposed.
+
+3. businessPattern
+
+Look at the recorded income, expenses,
+future cash flows, and projected balances.
+
+Identify a meaningful business pattern.
+
+Examples:
+- expenses are concentrated around a particular event
+- income is dependent on a large incoming payment
+- expenses are consistently larger than income
+- cash is healthy now but future obligations create pressure
+- incoming payments appear concentrated
+
+Do not invent patterns that are not supported
+by the supplied data.
+
+4. priorityAction
+
+State the single most important action
+the business should take first.
+
+Be practical and specific.
+
+5. outlook
+
+Explain what is likely to happen next based
+only on the supplied projection.
+
+Mention important future dates and balances
+when relevant.
+
+6. scenarioAnalysis
+
+Analyze this exact scenario:
+
+"What if a major customer payment is delayed?"
+
+Use only amounts and dates actually present
+in the supplied data.
+
+If there is an upcoming income payment,
+explain how delaying it would affect the
+projected cash position.
+
+Do not invent a payment amount.
+
+If there is no meaningful upcoming income,
+say that the available data does not contain
+a major upcoming customer payment and explain
+the implication using the available numbers.
+
+RULES:
+
+- Use exact financial numbers.
+- Never invent transactions.
+- Never invent amounts.
+- Never invent dates.
+- Use Indian Rupee notation such as ₹.
+- Keep the analysis practical.
+- Do not use markdown.
+- Do not use bullet points inside the values.
+- Each field should be readable as normal prose.
+- Return JSON only.
 """
 
     response = client.chat.completions.create(
@@ -50,7 +134,10 @@ Rules:
         messages=[
             {
                 "role": "system",
-                "content": "You are CashPilot AI. Return only valid JSON."
+                "content": (
+                    "You are CashPilot AI. "
+                    "Return only valid JSON."
+                )
             },
             {
                 "role": "user",
@@ -58,12 +145,16 @@ Rules:
             }
         ],
         temperature=0.2,
-        max_completion_tokens=800
+        max_completion_tokens=1400
     )
 
-    text = response.choices[0].message.content
+    text = (
+        response
+        .choices[0]
+        .message
+        .content
+    )
 
-    # Remove accidental markdown code fences
     text = text.strip()
 
     if text.startswith("```json"):

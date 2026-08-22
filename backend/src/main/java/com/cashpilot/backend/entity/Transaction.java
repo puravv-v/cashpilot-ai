@@ -1,6 +1,7 @@
 package com.cashpilot.backend.entity;
 
 import jakarta.persistence.*;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
@@ -25,11 +26,19 @@ public class Transaction {
     @Column(nullable = false)
     private LocalDateTime transactionDate;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    private User user;
+
     public Transaction() {
     }
 
-    public Transaction(BigDecimal amount, TransactionType type,
-                       String description, LocalDateTime transactionDate) {
+    public Transaction(
+            BigDecimal amount,
+            TransactionType type,
+            String description,
+            LocalDateTime transactionDate) {
+
         this.amount = amount;
         this.type = type;
         this.description = description;
@@ -44,31 +53,43 @@ public class Transaction {
         return amount;
     }
 
-    public void setAmount(BigDecimal amount) {
-        this.amount = amount;
-    }
-
     public TransactionType getType() {
         return type;
-    }
-
-    public void setType(TransactionType type) {
-        this.type = type;
     }
 
     public String getDescription() {
         return description;
     }
 
-    public void setDescription(String description) {
-        this.description = description;
-    }
-
     public LocalDateTime getTransactionDate() {
         return transactionDate;
     }
 
+    public User getUser() {
+        return user;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public void setAmount(BigDecimal amount) {
+        this.amount = amount;
+    }
+
+    public void setType(TransactionType type) {
+        this.type = type;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
     public void setTransactionDate(LocalDateTime transactionDate) {
         this.transactionDate = transactionDate;
+    }
+
+    public void setUser(User user) {
+        this.user = user;
     }
 }
