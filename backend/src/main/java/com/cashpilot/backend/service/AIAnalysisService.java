@@ -13,16 +13,21 @@ public class AIAnalysisService {
     private final RestClient restClient;
 
     public AIAnalysisService(
-            @Value("${ai.service.url}") String aiServiceUrl) {
-
-        this.restClient = RestClient.builder()
-                .baseUrl(aiServiceUrl)
-                .build();
+            RestClient.Builder restClientBuilder,
+            @Value("${ai.service.url}") String aiServiceUrl
+    ) {
+        this.restClient =
+                restClientBuilder
+                        .baseUrl(aiServiceUrl)
+                        .build();
     }
 
-    public AIAnalysisResponse analyze(AIAnalysisRequest request) {
+    public AIAnalysisResponse analyze(
+            AIAnalysisRequest request
+    ) {
 
-        return restClient.post()
+        return restClient
+                .post()
                 .uri("/api/ai/analyze")
                 .body(request)
                 .retrieve()

@@ -7,7 +7,8 @@ public class AIAnalysisResponse {
     private String businessPattern;
     private String priorityAction;
     private String outlook;
-    private String scenarioAnalysis;
+    private String goodScenario;
+    private String badScenario;
 
     public AIAnalysisResponse() {
     }
@@ -25,10 +26,10 @@ public class AIAnalysisResponse {
     }
 
     public void setRiskExplanation(
-        String riskExplanation
+            String riskExplanation
     ) {
         this.riskExplanation =
-            riskExplanation;
+                riskExplanation;
     }
 
     public String getBusinessPattern() {
@@ -36,10 +37,10 @@ public class AIAnalysisResponse {
     }
 
     public void setBusinessPattern(
-        String businessPattern
+            String businessPattern
     ) {
         this.businessPattern =
-            businessPattern;
+                businessPattern;
     }
 
     public String getPriorityAction() {
@@ -47,10 +48,10 @@ public class AIAnalysisResponse {
     }
 
     public void setPriorityAction(
-        String priorityAction
+            String priorityAction
     ) {
         this.priorityAction =
-            priorityAction;
+                priorityAction;
     }
 
     public String getOutlook() {
@@ -61,14 +62,25 @@ public class AIAnalysisResponse {
         this.outlook = outlook;
     }
 
-    public String getScenarioAnalysis() {
-        return scenarioAnalysis;
+    public String getGoodScenario() {
+        return goodScenario;
     }
 
-    public void setScenarioAnalysis(
-        String scenarioAnalysis
+    public void setGoodScenario(
+            String goodScenario
     ) {
-        this.scenarioAnalysis =
-            scenarioAnalysis;
+        this.goodScenario =
+                goodScenario;
+    }
+
+    public String getBadScenario() {
+        return badScenario;
+    }
+
+    public void setBadScenario(
+            String badScenario
+    ) {
+        this.badScenario =
+                badScenario;
     }
 }

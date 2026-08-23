@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const API = axios.create({
-  baseURL: "http://localhost:8080/api",
+  baseURL: "http://localhost:8000/api",
   headers: {
     "Content-Type": "application/json",
   },
@@ -72,6 +72,7 @@ CASH FLOW SUMMARY
 
 export const getCashFlowSummary = async () => {
   const response = await API.get("/cashflow/summary");
+
   return response.data;
 };
 
@@ -81,12 +82,10 @@ CASH FLOW PROJECTION
 =========================================================
 */
 
-export const getCashFlowProjection = async (currentCash) => {
-  const response = await API.get("/obligations/projection", {
-    params: {
-      currentCash: Number(currentCash || 0),
-    },
-  });
+export const getCashFlowProjection = async () => {
+  const response = await API.get(
+    "/cashflow/projection"
+  );
 
   return Array.isArray(response.data)
     ? response.data
@@ -99,14 +98,28 @@ CASH FLOW RISK
 =========================================================
 */
 
-export const getCashFlowRisk = async (currentCash) => {
-  const response = await API.get("/obligations/risk", {
-    params: {
-      currentCash: Number(currentCash || 0),
-    },
-  });
+export const getCashFlowRisk = async () => {
+  const response = await API.get(
+    "/cashflow/risk"
+  );
 
   return response.data;
+};
+
+/*
+=========================================================
+CASH FLOW RECOMMENDATIONS
+=========================================================
+*/
+
+export const getRecommendations = async () => {
+  const response = await API.get(
+    "/cashflow/recommendations"
+  );
+
+  return Array.isArray(response.data)
+    ? response.data
+    : response.data?.value || [];
 };
 
 /*
@@ -116,7 +129,11 @@ AI ANALYSIS
 */
 
 export const getAIAnalysis = async (data) => {
-  const response = await API.post("/ai/analyze", data);
+  const response = await API.post(
+    "/ai/analyze",
+    data
+  );
+
   return response.data;
 };
 
@@ -127,14 +144,18 @@ TRANSACTIONS
 */
 
 export const getTransactions = async () => {
-  const response = await API.get("/transactions");
+  const response = await API.get(
+    "/transactions"
+  );
 
   return Array.isArray(response.data)
     ? response.data
     : response.data?.value || [];
 };
 
-export const createTransaction = async (transaction) => {
+export const createTransaction = async (
+  transaction
+) => {
   const response = await API.post(
     "/transactions",
     transaction
@@ -166,14 +187,18 @@ FUTURE CASH FLOWS / OBLIGATIONS
 */
 
 export const getObligations = async () => {
-  const response = await API.get("/obligations");
+  const response = await API.get(
+    "/obligations"
+  );
 
   return Array.isArray(response.data)
     ? response.data
     : response.data?.value || [];
 };
 
-export const createObligation = async (obligation) => {
+export const createObligation = async (
+  obligation
+) => {
   const response = await API.post(
     "/obligations",
     obligation
@@ -212,16 +237,24 @@ export const markObligationAsDone = async (
 };
 
 export const deleteObligation = async (id) => {
-  await API.delete(`/obligations/${id}`);
+  await API.delete(
+    `/obligations/${id}`
+  );
 };
 
 export const deleteAllObligations = async () => {
-  const obligations = await getObligations();
+  const obligations =
+    await getObligations();
 
   await Promise.all(
     obligations
-      .filter((item) => item?.id != null)
-      .map((item) => deleteObligation(item.id))
+      .filter(
+        (item) => item?.id != null
+      )
+      .map(
+        (item) =>
+          deleteObligation(item.id)
+      )
   );
 };
 
@@ -239,7 +272,9 @@ export const getStartingCash = async () => {
   return response.data;
 };
 
-export const updateStartingCash = async (amount) => {
+export const updateStartingCash = async (
+  amount
+) => {
   const numericAmount = Number(amount);
 
   const response = await API.put(

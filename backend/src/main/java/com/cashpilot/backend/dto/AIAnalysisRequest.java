@@ -56,7 +56,7 @@ public class AIAnalysisRequest {
     }
 
     public void setProjection(
-        List<CashFlowProjection> projection
+            List<CashFlowProjection> projection
     ) {
         this.projection = projection;
     }
@@ -74,9 +74,8 @@ public class AIAnalysisRequest {
     }
 
     public void setRecommendations(
-        List<FinancialRecommendation> recommendations
+            List<FinancialRecommendation> recommendations
     ) {
-        this.recommendations =
-            recommendations;
+        this.recommendations = recommendations;
     }
 }
