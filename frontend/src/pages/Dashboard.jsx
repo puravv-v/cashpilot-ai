@@ -37,7 +37,7 @@ import {
   Legend,
 } from "recharts";
 
-import "./Dashboard.css";
+import "./dashboard.css";
 
 const INCOME_COLOR = "#16a34a";
 const EXPENSE_COLOR = "#dc2626";
@@ -178,6 +178,11 @@ function Dashboard({
       try {
         const aiResponse = await getAIAnalysis({
           currentCash,
+          startingCash: Number(
+            summaryData?.startingCash || 0
+          ),
+          totalIncome,
+          totalExpenses,
           projection: cleanProjection,
           risk: riskData,
           recommendations: [],
@@ -1991,6 +1996,33 @@ function Dashboard({
                 aiData.outlook
               }
               icon="↗"
+            />
+
+            <AIBox
+              label="BUSINESS PATTERN"
+              title="What pattern do you see?"
+              text={
+                aiData.businessPattern
+              }
+              icon="◌"
+            />
+
+            <AIBox
+              label="GOOD SCENARIO"
+              title="What could go right?"
+              text={
+                aiData.goodScenario
+              }
+              icon="✓"
+            />
+
+            <AIBox
+              label="BAD SCENARIO"
+              title="What could go wrong?"
+              text={
+                aiData.badScenario
+              }
+              icon="!"
             />
 
           </div>
