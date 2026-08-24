@@ -37,7 +37,7 @@ import {
   Legend,
 } from "recharts";
 
-import "./dashboard.css";
+import "./Dashboard.css";
 
 const INCOME_COLOR = "#16a34a";
 const EXPENSE_COLOR = "#dc2626";
