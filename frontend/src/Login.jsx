@@ -3,7 +3,7 @@ import "./Login.css";
 import { useState } from "react";
 import axios from "axios";
 
-const API_URL = "http://localhost:8000/api";
+const API_URL = import.meta.env.VITE_API_URL;
 console.log("🔥 CASH PILOT API URL:", API_URL);
 
 function Login({
