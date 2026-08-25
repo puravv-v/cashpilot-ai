@@ -4,6 +4,10 @@ AI-powered cash-flow management and financial decision-support platform for busi
 
 CashPilot helps businesses understand their current cash position, forecast future cash flow, identify liquidity risks, receive practical recommendations, and explore hypothetical good and bad cash-flow scenarios.
 
+## Live Demo
+
+🌐 **[Visit CashPilot](https://cashpilot.co.in)**
+
 ---
 
 ## Features
@@ -60,7 +64,7 @@ CashPilot provides:
 - Good scenario
 - Bad scenario
 
-The AI is grounded only in the supplied financial data and is instructed not to invent transactions, amounts, dates, payments, customers, income, expenses, or events.
+The AI uses the supplied financial data and is instructed not to invent transactions, amounts, dates, payments, customers, income, expenses, or events.
 
 ---
 
@@ -72,9 +76,9 @@ The Good Scenario and Bad Scenario are **hypothetical timing what-if analyses**.
 
 The AI considers favorable timing changes involving existing future cash flows, such as:
 
-- Payment arriving early
-- Payment arriving before an important expense
-- Expense being delayed
+- A payment arriving early
+- A payment arriving before an important expense
+- An expense being delayed
 
 It explains how the timing change could improve the cash position or prevent/reduce a projected negative balance.
 
@@ -82,16 +86,38 @@ It explains how the timing change could improve the cash position or prevent/red
 
 The AI considers unfavorable timing changes, such as:
 
-- Payment being delayed
-- Payment arriving after an important expense
-- Expense arriving earlier
-- Expense occurring before expected income
+- A payment being delayed
+- A payment arriving after an important expense
+- An expense arriving earlier
+- An expense occurring before expected income
 
 It explains how the timing change could increase cash pressure or cause the balance to become negative.
 
 The scenarios are hypothetical and are not presented as events that will actually happen.
 
 ---
+
+## Screenshots
+
+### Dashboard
+
+![CashPilot Dashboard](screenshots/dashboard.png)
+
+### Cash Flow Projection
+
+![Cash Flow Projection](screenshots/cash-flow.png)
+
+### Future Transactions
+
+![Future Transactions](screenshots/future-transactions.png)
+
+---
+
+### AI Financial Analysis
+
+![AI Financial Analysis](screenshots/ai-analysis.png)
+
+
 
 ## Architecture
 
@@ -108,7 +134,7 @@ The scenarios are hypothetical and are not presented as events that will actuall
         │                               │
         │ Auth • Transactions           │
         │ Cash Flow • Risk              │
-        │ Obligations • Recommendations│
+        │ Obligations • Recommendations │
         └───────────┬───────────┬───────┘
                     │           │
                     │           ▼
@@ -125,15 +151,15 @@ The scenarios are hypothetical and are not presented as events that will actuall
                    └─────────┘
 ```
 
-### Responsibilities
+### Components
 
 **React Frontend**
 
-Handles the user interface, interaction, API requests, and presentation of financial and AI information.
+Provides the user interface and communicates with the backend through REST APIs.
 
 **Spring Boot Backend**
 
-Handles authentication, user data, database operations, financial calculations, projections, risk detection, recommendations, and AI-service integration.
+Handles authentication, transactions, cash-flow calculations, projections, risk detection, recommendations, and communication with the AI service.
 
 **PostgreSQL**
 
@@ -141,11 +167,11 @@ Stores application and financial data.
 
 **Python AI Service**
 
-Processes structured financial data, communicates with the Groq API, extracts the AI response, and validates the returned analysis.
+Processes structured financial data and generates the AI-powered financial analysis.
 
 **Groq API**
 
-Provides the language-model generation used for financial analysis.
+Provides the language-model generation used by the AI service.
 
 ---
 
@@ -163,9 +189,9 @@ For expense:
 New Balance = Previous Balance - Expense
 ```
 
-The backend processes future obligations chronologically to produce the projected running balance.
+Future obligations are processed chronologically to calculate the projected running balance.
 
-Risk is determined from the lowest projected balance.
+Risk is determined from the lowest projected balance:
 
 ```text
 Balance <= ₹10,000
@@ -244,13 +270,10 @@ badScenario
 cashpilot-ai/
 │
 ├── frontend/          # React frontend
-│
 ├── backend/           # Spring Boot backend
-│
 ├── ai-service/        # Python FastAPI AI service
-│
 ├── docs/              # Additional documentation
-│
+├── screenshots/       # Project screenshots
 └── README.md
 ```
 
@@ -261,7 +284,7 @@ cashpilot-ai/
 | Layer | Technology |
 |---|---|
 | Frontend | React |
-| Frontend Build Tool | Vite |
+| Build Tool | Vite |
 | Backend | Spring Boot |
 | Backend Language | Java |
 | Database | PostgreSQL |
@@ -272,7 +295,11 @@ cashpilot-ai/
 
 ---
 
-## Running Locally
+## Local Development
+
+CashPilot is deployed and available at **[cashpilot.co.in](https://cashpilot.co.in)**.
+
+For developers who want to run the project locally, the services can be started separately.
 
 ### Frontend
 
@@ -296,52 +323,54 @@ cd ai-service
 python -m uvicorn app.main:app --reload
 ```
 
-Required AI environment variable:
+The AI service requires:
 
 ```text
 GROQ_API_KEY
 ```
 
-The backend also requires the configured AI service URL.
+Production configuration and secrets are provided through environment variables.
 
 ---
 
 ## Deployment
 
-CashPilot is deployed as separate services.
+CashPilot is deployed as separate services:
 
 ```text
 React Frontend
-      │
-      ▼
+       │
+       ▼
 Spring Boot Backend
-      │
-      ├── PostgreSQL
-      │
-      ▼
+       │
+       ├── PostgreSQL
+       │
+       ▼
 Python AI Service
-      │
-      ▼
+       │
+       ▼
 Groq API
 ```
 
-Production configuration is supplied through environment variables rather than hard-coded credentials.
+The public application is available at:
+
+**https://cashpilot.co.in**
 
 ---
 
-## Security and Data Handling
+## Security
 
 Financial operations are performed in the context of the authenticated user.
 
-The backend uses user-specific data when accessing:
+User-specific data is used for:
 
 - Transactions
 - Cash obligations
 - Cash-flow projections
-- Risk information
-- Recommendations
+- Risk analysis
+- Financial recommendations
 
-Secrets such as API keys and database credentials are stored through environment configuration and should not be committed to Git.
+Secrets such as API keys and database credentials are stored through environment configuration and are not committed to the repository.
 
 ---
 
@@ -352,11 +381,11 @@ Develop
    ↓
 Test locally
    ↓
-Review git status
+Review changes
    ↓
 Commit
    ↓
-Push to main
+Push to Git
    ↓
 Deploy
    ↓
@@ -365,23 +394,11 @@ Verify production
 
 ---
 
-## Repository Documentation
-
-This README contains the main project documentation.
-
-Additional technical documentation can be added under:
-
-```text
-docs/
-```
-
----
-
 ## Project Goal
 
-CashPilot is designed to move beyond simply displaying financial data.
+CashPilot goes beyond simply displaying financial data.
 
-It combines deterministic financial calculations with AI-powered interpretation to help a business answer:
+It combines deterministic cash-flow calculations with AI-powered interpretation to help businesses answer:
 
 ```text
 How much cash do I have?
