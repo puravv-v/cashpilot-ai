@@ -235,7 +235,7 @@ Return JSON only.
 
         temperature=0,
 
-        max_completion_tokens=1400
+        max_completion_tokens=2000
     )
 
     text = response.choices[0].message.content
